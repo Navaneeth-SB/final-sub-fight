@@ -617,19 +617,25 @@
     <!-- ================================================================= -->
     <div id="tourneySpectatorDock" class="hidden absolute bottom-2 left-2 right-2 z-30 pointer-events-auto">
       <div class="max-w-5xl mx-auto bg-slate-950/92 backdrop-blur-md border-2 border-amber-500/60 rounded-2xl p-2 sm:p-3 shadow-2xl grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-        <!-- Status & Round Info (3 Cols) -->
-        <div class="sm:col-span-3 flex flex-col justify-center border-b sm:border-b-0 sm:border-r border-slate-800 pb-1 sm:pb-0 sm:pr-2">
-          <div class="flex items-center gap-1.5">
-            <span id="specDockBadge" class="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-arcade font-black text-[9px]">👁 SPECTATING</span>
-            <span id="specDockRound" class="font-arcade font-bold text-[10px] text-amber-300">ROUND 1</span>
+        <!-- Status, Round Timer & Back to Room Button (4 Cols) -->
+        <div class="sm:col-span-4 flex flex-col justify-center gap-1 border-b sm:border-b-0 sm:border-r border-slate-800 pb-1 sm:pb-0 sm:pr-2">
+          <div class="flex items-center justify-between gap-1 flex-wrap">
+            <div class="flex items-center gap-1">
+              <span id="specDockBadge" class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-arcade font-black text-[8px]">👁 SPECTATING</span>
+              <span id="specDockRound" class="font-arcade font-bold text-[9px] text-amber-300">RND 1</span>
+              <span id="specDockTimer" class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-300 font-arcade text-[8px]">⏱ 110s</span>
+            </div>
+            <button id="btnSpecBackToRoom" type="button" class="arcade-btn px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400 text-amber-300 font-arcade font-bold text-[8px]">
+              🏆 ROOM / CHANGE CHAR
+            </button>
           </div>
-          <div id="specDockSub" class="text-[10px] font-hud text-slate-300 truncate mt-0.5">
+          <div id="specDockSub" class="text-[10px] font-hud text-slate-300 truncate">
             Watching live tournament match...
           </div>
         </div>
 
-        <!-- Ongoing Matches to Spectate (5 Cols) -->
-        <div class="sm:col-span-5 flex flex-col gap-1">
+        <!-- Ongoing Matches to Spectate (4 Cols) -->
+        <div class="sm:col-span-4 flex flex-col gap-1">
           <div class="text-[9px] font-arcade text-sky-400 uppercase tracking-wider">👁 LIVE MATCHES (TAP TO WATCH):</div>
           <div id="specMatchesList" class="flex items-center gap-1.5 overflow-x-auto py-0.5"></div>
         </div>
@@ -3916,10 +3922,14 @@
     // =========================================================================
     
     // =========================================================================
-    // 10B. 10-PLAYER ONLINE TOURNAMENT ENGINE (BRACKETS, SPECTATE & LOSER CHALLENGE)
+    // 10B. 10-PLAYER ONLINE TOURNAMENT ENGINE (HOST START, TIMER, FORFEIT & KICK)
     // =========================================================================
     const MAX_TOURNEY_PLAYERS = 10;
+    const TOURNEY_ROUND_MAX_SEC = 110; // Max seconds per tournament bracket round so nobody ever gets stuck
     const BOT_NICKNAMES = ['CYBER_RAJ', 'THAKUR_X', 'BIHAR_BOSS', 'NIGHT_KING', 'DBH_LEGEND', 'CHOR_DON', 'IRON_BABA', 'NEON_MONK', 'SADAK_HERO'];
+    let hostWatchdogInterval = null;
+    let guestHeartbeatInterval = null;
+    let matchFinishRetryTimer = null;
 
     function initTournamentUI() {
       const sel = document.getElementById('selectOnlineFighter');
@@ -3946,32 +3956,33 @@
       }
 
       resetLocalTournamentLobby();
+      startTournamentHeartbeatsAndWatchdog();
 
       const btnTabTourney = document.getElementById('btnTabTourney');
       const btnTabDuel = document.getElementById('btnTabDuel');
       if (btnTabTourney && btnTabDuel) {
         btnTabTourney.addEventListener('click', () => {
           state.onlineSubMode = 'tournament';
-          btnTabTourney.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-arcade font-black text-[9px] sm:text-xs';
-          btnTabDuel.className = 'px-2.5 py-1 rounded-lg text-slate-400 hover:text-white font-arcade font-bold text-[9px] sm:text-xs';
+          btnTabTourney.className = 'px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-arcade font-black text-[9px] sm:text-xs';
+          btnTabDuel.className = 'px-2 py-0.5 rounded-md text-slate-400 hover:text-white font-arcade font-bold text-[9px] sm:text-xs';
           document.getElementById('tourneyLobbySection').classList.remove('hidden');
           sfx.click();
         });
         btnTabDuel.addEventListener('click', () => {
           state.onlineSubMode = 'duel';
-          btnTabDuel.className = 'px-2.5 py-1 rounded-lg bg-sky-500 text-slate-950 font-arcade font-black text-[9px] sm:text-xs';
-          btnTabTourney.className = 'px-2.5 py-1 rounded-lg text-slate-400 hover:text-white font-arcade font-bold text-[9px] sm:text-xs';
+          btnTabDuel.className = 'px-2 py-0.5 rounded-md bg-sky-500 text-slate-950 font-arcade font-black text-[9px] sm:text-xs';
+          btnTabTourney.className = 'px-2 py-0.5 rounded-md text-slate-400 hover:text-white font-arcade font-bold text-[9px] sm:text-xs';
           document.getElementById('tourneyLobbySection').classList.add('hidden');
           sfx.click();
         });
       }
 
+      // READY Button: Marks player Ready, NEVER auto-starts (Only Host can start!)
       const btnReady = document.getElementById('btnTourneyReady');
       if (btnReady) {
         btnReady.addEventListener('click', () => {
           sfx.confirm();
           const typedCode = (document.getElementById('inputJoinCode')?.value || '').trim().toUpperCase();
-          // If the user typed a friend's Room Code in the Join box and pressed READY without clicking JOIN first, auto-join that room!
           if (typedCode.length >= 4 && state.onlineRole !== 'host' && state.roomCode !== typedCode) {
             state.tourney.myPendingReady = true;
             document.getElementById('btnJoinRoom')?.click();
@@ -3996,16 +4007,13 @@
           } else {
             state.onlineRole = 'host';
             state.tourney.active = true;
-            if (!state.roomCode) {
-              document.getElementById('btnCreateRoom')?.click();
-            }
-            checkAndStartHostTournamentRound();
             broadcastHostTourneyState();
           }
           renderTournamentLobbyUI();
         });
       }
 
+      // "+ ADD AI BOT" Button (Host Only)
       const btnAddBot = document.getElementById('btnAddTourneyBot');
       if (btnAddBot) {
         btnAddBot.addEventListener('click', () => {
@@ -4020,9 +4028,9 @@
           sfx.click();
           state.onlineRole = 'host';
           state.tourney.active = true;
-          const botIdx = state.tourney.players.length;
-          const botNick = BOT_NICKNAMES[(botIdx - 1) % BOT_NICKNAMES.length];
-          const botFighter = (state.tourney.myFighterIdx + botIdx) % FIGHTERS.length;
+          const usedNicks = new Set(state.tourney.players.map(p => p.nickname));
+          const botNick = BOT_NICKNAMES.find(n => !usedNicks.has(n)) || `BOT_${state.tourney.players.length}`;
+          const botFighter = (state.tourney.myFighterIdx + state.tourney.players.length) % FIGHTERS.length;
           state.tourney.players.push({
             id: 'bot_' + Math.random().toString(36).substring(2, 7),
             nickname: botNick,
@@ -4031,55 +4039,48 @@
             isBot: true,
             status: 'lobby',
             wins: 0,
-            grudgeWins: 0
+            grudgeWins: 0,
+            lastSeen: Date.now()
           });
-          document.getElementById('onlineStatusText').textContent = `Added ${botNick} (${state.tourney.players.length}/10)! Press READY when everyone is in.`;
+          document.getElementById('onlineStatusText').textContent = `Added ${botNick} (${state.tourney.players.length}/10)! Host can click ⚡ START TOURNAMENT anytime.`;
           broadcastHostTourneyState();
           renderTournamentLobbyUI();
-          checkAndStartHostTournamentRound();
         });
       }
 
-      // Explicit "⚡ START TOURNAMENT" Button
+      // "⚡ START TOURNAMENT" Button (STRICTLY HOST ONLY!)
       const btnStartNow = document.getElementById('btnStartTourneyNow');
       if (btnStartNow) {
         btnStartNow.addEventListener('click', () => {
           if (state.onlineRole === 'guest') {
-            // Guest clicking Start Now marks themselves Ready
-            document.getElementById('btnTourneyReady')?.click();
+            document.getElementById('onlineStatusText').textContent = 'Only the Room Host can start the tournament!';
             return;
           }
           sfx.confirm();
           state.onlineRole = 'host';
           state.tourney.active = true;
+
+          // If we are coming from a finished tournament, reset everyone to lobby before starting fresh
+          state.tourney.players.forEach(p => {
+            p.status = 'lobby';
+            p.ready = true;
+            p.lastSeen = Date.now();
+          });
+
           const me = state.tourney.players.find(p => p.id === state.tourney.myId);
           if (me) {
             me.ready = true;
             me.nickname = (document.getElementById('inputOnlineNickname').value.trim().toUpperCase() || 'FIGHTER').slice(0, 14);
             me.fighterIdx = parseInt(document.getElementById('selectOnlineFighter').value, 10) || 0;
           }
-          // If the host is alone (1 player) and clicks Start Tournament, auto-fill 3 AI Bots for an instant 4-player tournament!
-          while (state.tourney.players.length < 4 && state.tourney.players.length === 1) {
-            for (let b = 0; b < 3; b++) {
-              const botIdx = state.tourney.players.length;
-              const botNick = BOT_NICKNAMES[(botIdx - 1) % BOT_NICKNAMES.length];
-              const botFighter = (state.tourney.myFighterIdx + botIdx) % FIGHTERS.length;
-              state.tourney.players.push({
-                id: 'bot_' + Math.random().toString(36).substring(2, 7),
-                nickname: botNick,
-                fighterIdx: botFighter,
-                ready: true,
-                isBot: true,
-                status: 'lobby',
-                wins: 0,
-                grudgeWins: 0
-              });
-            }
+
+          if (state.tourney.players.length < 2) {
+            document.getElementById('onlineStatusText').textContent = 'Need at least 2 players! Have a friend join or click + ADD AI BOT first.';
+            return;
           }
-          // Force all current players ready and start Round 1 immediately!
-          state.tourney.players.forEach(p => { p.ready = true; });
+
           renderTournamentLobbyUI();
-          checkAndStartHostTournamentRound();
+          hostStartTournamentNow();
         });
       }
 
@@ -4105,28 +4106,160 @@
         state.tourney.pendingChallengeFrom = null;
       });
 
-      document.getElementById('btnTourneyBackLobby')?.addEventListener('click', () => {
+      // Return to Tournament Room Lobby (from Champion Modal OR Spectator Dock) to change Character/Name & start a new tournament!
+      const returnToTourneyRoomLobby = () => {
+        sfx.click();
         document.getElementById('modalTourneyChampion').classList.add('hidden');
         if (state.onlineRole === 'host') {
           state.tourney.phase = 'lobby';
           state.tourney.roundNum = 1;
           state.tourney.matches = [];
+          state.tourney.currentMatchId = null;
+          state.tourney.myMatchRole = null;
           state.tourney.players.forEach(p => {
             p.status = 'lobby';
             p.ready = p.isBot ? true : false;
           });
           broadcastHostTourneyState();
+        } else if (state.onlineRole === 'guest') {
+          // Guest returns to Room modal so they can edit their Fighter & Nickname right away
+          sendTourneyPacketToHost({
+            type: 'tourney_UpdatePlayer',
+            id: state.tourney.myId,
+            nickname: state.tourney.myNickname,
+            fighterIdx: state.tourney.myFighterIdx,
+            ready: false
+          });
         }
+        state.roundLive = false;
         showScreen('home');
         document.getElementById('modalOnlineLobby').classList.remove('hidden');
         renderTournamentLobbyUI();
-      });
+      };
+
+      document.getElementById('btnTourneyBackLobby')?.addEventListener('click', returnToTourneyRoomLobby);
+      document.getElementById('btnSpecBackToRoom')?.addEventListener('click', returnToTourneyRoomLobby);
 
       document.getElementById('btnTourneyExitHome')?.addEventListener('click', () => {
         document.getElementById('modalTourneyChampion').classList.add('hidden');
         state.tourney.active = false;
         showScreen('home');
       });
+
+      // Notify Host immediately if this player closes or refreshes their browser tab
+      window.addEventListener('beforeunload', () => {
+        if (state.tourney.active && state.onlineRole === 'guest') {
+          sendTourneyPacketToHost({ type: 'tourney_leave', id: state.tourney.myId });
+        }
+      });
+    }
+
+    function startTournamentHeartbeatsAndWatchdog() {
+      // 1) Guest sends heartbeat every 2s so Host knows Guest is online
+      if (guestHeartbeatInterval) clearInterval(guestHeartbeatInterval);
+      guestHeartbeatInterval = setInterval(() => {
+        if (state.tourney.active && state.onlineRole === 'guest' && state.roomCode) {
+          sendTourneyPacketToHost({
+            type: 'tourney_heartbeat',
+            id: state.tourney.myId,
+            matchId: state.tourney.currentMatchId
+          });
+        }
+      }, 2000);
+
+      // 2) Host runs 1-second Tournament Timer & Offline Player Watchdog
+      if (hostWatchdogInterval) clearInterval(hostWatchdogInterval);
+      hostWatchdogInterval = setInterval(() => {
+        if (!state.tourney.active || state.onlineRole !== 'host') return;
+        const now = Date.now();
+
+        // Check for any human guest who stopped sending heartbeats (> 8 seconds offline during active tournament)
+        if (state.tourney.phase === 'active') {
+          const offlinePlayers = state.tourney.players.filter(
+            p => !p.isBot && p.id !== state.tourney.myId && p.lastSeen && (now - p.lastSeen > 8500)
+          );
+          offlinePlayers.forEach(p => {
+            handleHostPlayerDisconnected(p.id, 'disconnected');
+          });
+        }
+
+        // Decrement Tournament Round Watchdog Timer so no match or round can ever get stuck forever!
+        if (state.tourney.phase === 'active') {
+          if (typeof state.tourney.roundTimeLeft !== 'number') {
+            state.tourney.roundTimeLeft = TOURNEY_ROUND_MAX_SEC;
+          }
+          if (state.tourney.roundTimeLeft > 0) {
+            state.tourney.roundTimeLeft -= 1;
+            const timerEl = document.getElementById('specDockTimer');
+            if (timerEl) timerEl.textContent = `⏱ ${state.tourney.roundTimeLeft}s`;
+          } else {
+            // Round timer expired! Force-finish any stuck matches in this round so winners advance immediately!
+            const stuckMatches = state.tourney.matches.filter(m => m.status === 'fighting');
+            stuckMatches.forEach(m => {
+              const p1Obj = state.tourney.players.find(x => x.id === m.p1Id);
+              const p2Obj = state.tourney.players.find(x => x.id === m.p2Id);
+              // Prefer human over bot, or higher round wins
+              let winId = m.p1Id;
+              let loseId = m.p2Id;
+              if (p1Obj?.isBot && !p2Obj?.isBot) {
+                winId = m.p2Id;
+                loseId = m.p1Id;
+              } else if ((m.p2Wins || 0) > (m.p1Wins || 0)) {
+                winId = m.p2Id;
+                loseId = m.p1Id;
+              }
+              processHostMatchFinished(m.id, winId, loseId, 2, 0);
+            });
+          }
+        }
+      }, 1000);
+    }
+
+    // Host function to Remove / Kick a player (or AI Bot) from the Tournament Room or mid-tournament!
+    function hostRemoveTournamentPlayer(targetId) {
+      if (state.onlineRole === 'guest' || targetId === state.tourney.myId) return;
+      sfx.click();
+      sendTourneyPacketFromHost({ type: 'tourney_kicked', targetId }, targetId);
+      handleHostPlayerDisconnected(targetId, 'removed by Host');
+    }
+
+    // Handles both unexpected player disconnect AND Host kicking a player:
+    // Immediately declares their opponent the Winner by Forfeit and advances to the next match!
+    function handleHostPlayerDisconnected(playerId, reason = 'went offline') {
+      if (state.onlineRole !== 'host') return;
+      const p = state.tourney.players.find(x => x.id === playerId);
+      if (!p) return;
+      const goneNick = p.nickname;
+
+      // 1) If this player was in an active match, immediately declare their opponent the WINNER!
+      const activeMatch = state.tourney.matches.find(
+        m => m.status === 'fighting' && (m.p1Id === playerId || m.p2Id === playerId)
+      );
+
+      // Remove player from room roster & close connection
+      state.tourney.players = state.tourney.players.filter(x => x.id !== playerId);
+      if (state.tourney.hostConns[playerId]) {
+        try { state.tourney.hostConns[playerId].close(); } catch (e) {}
+        delete state.tourney.hostConns[playerId];
+      }
+
+      document.getElementById('onlineStatusText').textContent = `${goneNick} ${reason}.`;
+
+      if (activeMatch) {
+        const winnerId = activeMatch.p1Id === playerId ? activeMatch.p2Id : activeMatch.p1Id;
+        const winPlayer = state.tourney.players.find(x => x.id === winnerId);
+        if (winPlayer) {
+          showArenaCallout('OPPONENT LEFT!', `${winPlayer.nickname} WINS BY FORFEIT!`);
+        }
+        processHostMatchFinished(activeMatch.id, winnerId, playerId, 2, 0);
+      } else if (state.tourney.phase === 'active') {
+        // Even if they weren't in an active match (e.g. they were 'advanced' or 'bye'), check if only 1 contender remains!
+        checkRoundAdvancementOnHost();
+        broadcastHostTourneyState();
+      } else {
+        broadcastHostTourneyState();
+        renderTournamentLobbyUI();
+      }
     }
 
     function resetLocalTournamentLobby() {
@@ -4136,6 +4269,7 @@
       state.tourney.myFighterIdx = fIdx;
       state.tourney.phase = 'lobby';
       state.tourney.roundNum = 1;
+      state.tourney.roundTimeLeft = TOURNEY_ROUND_MAX_SEC;
       state.tourney.matches = [];
       state.tourney.players = [{
         id: state.tourney.myId,
@@ -4145,7 +4279,8 @@
         isBot: false,
         status: 'lobby',
         wins: 0,
-        grudgeWins: 0
+        grudgeWins: 0,
+        lastSeen: Date.now()
       }];
       renderTournamentLobbyUI();
     }
@@ -4202,6 +4337,7 @@
         type: 'tourney_state',
         phase: state.tourney.phase,
         roundNum: state.tourney.roundNum,
+        roundTimeLeft: state.tourney.roundTimeLeft || TOURNEY_ROUND_MAX_SEC,
         players: state.tourney.players,
         matches: state.tourney.matches,
         championId: state.tourney.championId,
@@ -4215,6 +4351,21 @@
     }
 
     function handleHostIncomingTourneyMsg(msg, conn) {
+      // Update player's lastSeen timestamp on ANY incoming packet!
+      const senderId = msg.id || msg._senderId;
+      if (senderId) {
+        const senderObj = state.tourney.players.find(p => p.id === senderId);
+        if (senderObj) senderObj.lastSeen = Date.now();
+      }
+
+      if (msg.type === 'tourney_heartbeat') {
+        return;
+      }
+      if (msg.type === 'tourney_leave') {
+        handleHostPlayerDisconnected(msg.id, 'left the tournament');
+        return;
+      }
+
       if (msg.type === 'tourney_join') {
         const isExisting = state.tourney.players.some(p => p.id === msg.id);
         if (state.tourney.players.length >= MAX_TOURNEY_PLAYERS && !isExisting) {
@@ -4235,17 +4386,18 @@
             isBot: false,
             status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
             wins: 0,
-            grudgeWins: 0
+            grudgeWins: 0,
+            lastSeen: Date.now()
           });
           sfx.confirm();
           document.getElementById('onlineStatusText').textContent = `✓ ${msg.nickname} joined Room ${state.roomCode} (${state.tourney.players.length}/10)!`;
         } else {
           existing.nickname = (msg.nickname || existing.nickname).slice(0, 14);
           existing.fighterIdx = msg.fighterIdx ?? existing.fighterIdx;
+          existing.lastSeen = Date.now();
           if (typeof msg.ready === 'boolean') existing.ready = msg.ready;
         }
         broadcastHostTourneyState();
-        checkAndStartHostTournamentRound();
 
       } else if (msg.type === 'tourney_UpdatePlayer') {
         let p = state.tourney.players.find(x => x.id === msg.id);
@@ -4258,7 +4410,8 @@
             isBot: false,
             status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
             wins: 0,
-            grudgeWins: 0
+            grudgeWins: 0,
+            lastSeen: Date.now()
           };
           state.tourney.players.push(p);
         }
@@ -4266,8 +4419,8 @@
           p.nickname = (msg.nickname || p.nickname).slice(0, 14);
           p.fighterIdx = msg.fighterIdx ?? p.fighterIdx;
           p.ready = !!msg.ready;
+          p.lastSeen = Date.now();
           broadcastHostTourneyState();
-          checkAndStartHostTournamentRound();
         }
 
       } else if (msg.type === 'tourney_p2_act') {
@@ -4285,7 +4438,6 @@
         if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole !== 'p1') {
           applyRemoteMatchSnapshot(msg);
         }
-        // Also forward to PeerJS guests in case any guest is only on PeerJS
         Object.entries(state.tourney.hostConns).forEach(([pid, c]) => {
           if (pid !== msg._senderId && c && c.open) {
             try { c.send(msg); } catch (e) {}
@@ -4308,6 +4460,17 @@
     }
 
     function handleGuestIncomingTourneyMsg(msg) {
+      if (msg.type === 'tourney_kicked' && msg.targetId === state.tourney.myId) {
+        if (joinRetryTimer) { clearInterval(joinRetryTimer); joinRetryTimer = null; }
+        state.tourney.active = false;
+        state.onlineRole = null;
+        state.roomCode = '';
+        resetLocalTournamentLobby();
+        showScreen('home');
+        document.getElementById('modalOnlineLobby').classList.remove('hidden');
+        document.getElementById('onlineStatusText').textContent = 'You were removed from the room by the Host.';
+        return;
+      }
       if (msg.type === 'tourney_full') {
         if (joinRetryTimer) { clearInterval(joinRetryTimer); joinRetryTimer = null; }
         document.getElementById('onlineStatusText').textContent = 'Room is full (Max 10/10 players)!';
@@ -4320,12 +4483,11 @@
             clearInterval(joinRetryTimer);
             joinRetryTimer = null;
             sfx.confirm();
-            document.getElementById('onlineStatusText').textContent = `✓ Joined Room ${state.roomCode} (${msg.players.length}/10)! Tap PRESS READY when set.`;
+            document.getElementById('onlineStatusText').textContent = `✓ Joined Room ${state.roomCode} (${msg.players.length}/10)! Waiting for Host to start.`;
             const joinBtn = document.getElementById('btnJoinRoom');
             if (joinBtn) joinBtn.textContent = '✓ JOINED';
           }
         } else {
-          // Host broadcasted state but hasn't seen our join packet yet -> send join immediately!
           sendTourneyPacketToHost({
             type: 'tourney_join',
             id: state.tourney.myId,
@@ -4339,12 +4501,22 @@
         const prevMatchId = state.tourney.currentMatchId;
         state.tourney.phase = msg.phase;
         state.tourney.roundNum = msg.roundNum;
+        state.tourney.roundTimeLeft = msg.roundTimeLeft ?? TOURNEY_ROUND_MAX_SEC;
         state.tourney.players = msg.players || [];
         state.tourney.matches = msg.matches || [];
         state.tourney.championId = msg.championId;
         state.tourney.championNick = msg.championNick;
         state.tourney.championFighterIdx = msg.championFighterIdx;
         if (msg.stageKey) state.stageKey = msg.stageKey;
+
+        // If our current match is now marked finished on Host, stop local finish retry timer
+        if (matchFinishRetryTimer) {
+          const curM = state.tourney.matches.find(x => x.id === state.tourney.currentMatchId);
+          if (!curM || curM.status === 'finished' || state.tourney.phase === 'champion') {
+            clearInterval(matchFinishRetryTimer);
+            matchFinishRetryTimer = null;
+          }
+        }
 
         renderTournamentLobbyUI();
         syncLocalPlayerWithTourneyState(prevMatchId);
@@ -4376,9 +4548,7 @@
       conn.on('data', msg => handleIncomingNetworkMessage(msg, conn));
       conn.on('close', () => {
         if (conn._playerId) {
-          delete state.tourney.hostConns[conn._playerId];
-          state.tourney.players = state.tourney.players.filter(p => p.id !== conn._playerId);
-          broadcastHostTourneyState();
+          handleHostPlayerDisconnected(conn._playerId, 'disconnected');
         }
       });
     }
@@ -4409,32 +4579,46 @@
       sfx.confirm();
     }
 
-    function checkAndStartHostTournamentRound() {
-      if (state.onlineRole !== 'host' || state.tourney.phase !== 'lobby') return;
+    // ONLY called when Host explicitly clicks "⚡ START TOURNAMENT"
+    function hostStartTournamentNow() {
+      if (state.onlineRole !== 'host') return;
       const players = state.tourney.players;
       if (players.length < 2) {
-        document.getElementById('onlineStatusText').textContent = 'Waiting for at least 2 players (or click + ADD AI BOT to test solo)...';
+        document.getElementById('onlineStatusText').textContent = 'Need at least 2 players to start! Add an AI Bot or invite a friend.';
         return;
       }
-      const allReady = players.every(p => p.ready);
-      if (!allReady) return;
 
       state.tourney.phase = 'active';
       state.tourney.roundNum = 1;
       state.tourney.championId = null;
+      state.tourney.currentMatchId = null;
 
-      const shuffled = [...players].sort(() => Math.random() - 0.5);
-      createHostBracketMatchesFromPool(shuffled, 1);
+      // Put Humans first in pairing order so Humans never get stuck on a BYE while Bots fight each other!
+      const humans = players.filter(p => !p.isBot).sort(() => Math.random() - 0.5);
+      const bots = players.filter(p => p.isBot).sort(() => Math.random() - 0.5);
+      const orderedPool = [...humans, ...bots];
+
+      createHostBracketMatchesFromPool(orderedPool, 1);
     }
 
     function createHostBracketMatchesFromPool(pool, roundNum) {
       state.tourney.roundNum = roundNum;
+      state.tourney.roundTimeLeft = TOURNEY_ROUND_MAX_SEC;
       state.tourney.matches = state.tourney.matches.filter(m => m.bracket === 'loser' && m.status === 'fighting');
 
-      for (let i = 0; i < pool.length; i += 2) {
-        if (i + 1 < pool.length) {
-          const p1 = pool[i];
-          const p2 = pool[i + 1];
+      // Always keep Human players at the front of `pool` so if `pool.length` is odd, a Bot gets the BYE (or Human gets paired immediately)
+      const humans = pool.filter(p => !p.isBot);
+      const bots = pool.filter(p => p.isBot);
+      const sortedPool = [...humans, ...bots];
+
+      for (let i = 0; i < sortedPool.length; i += 2) {
+        if (i + 1 < sortedPool.length) {
+          let p1 = sortedPool[i];
+          let p2 = sortedPool[i + 1];
+          // CRITICAL FIX: Ensure if one player is Human and the other is Bot, Human is ALWAYS p1 on the Host BEFORE broadcasting!
+          if (p1.isBot && !p2.isBot) {
+            const tmp = p1; p1 = p2; p2 = tmp;
+          }
           p1.status = 'fighting';
           p2.status = 'fighting';
           const matchId = `m_r${roundNum}_${i / 2}_${Date.now().toString(36)}`;
@@ -4457,7 +4641,7 @@
             p2Wins: 0
           });
         } else {
-          const byePlayer = pool[i];
+          const byePlayer = sortedPool[i];
           byePlayer.status = 'bye';
         }
       }
@@ -4470,6 +4654,11 @@
 
     function simulateBotVsBotMatchesOnHost() {
       if (state.onlineRole !== 'host') return;
+      // Check if there are any Human matches currently fighting in this round
+      const anyHumanFighting = state.tourney.matches.some(
+        m => m.bracket === 'main' && m.status === 'fighting' && (!m.p1IsBot || !m.p2IsBot)
+      );
+      const delayMs = anyHumanFighting ? 4000 : 800;
       state.tourney.matches.forEach(m => {
         if (m.status === 'fighting' && m.p1IsBot && m.p2IsBot && !m._botTimer) {
           m._botTimer = setTimeout(() => {
@@ -4478,16 +4667,19 @@
             const winId = p1Won ? m.p1Id : m.p2Id;
             const loseId = p1Won ? m.p2Id : m.p1Id;
             processHostMatchFinished(m.id, winId, loseId, p1Won ? 2 : 1, p1Won ? 1 : 2);
-          }, 9500);
+          }, delayMs);
         }
       });
     }
 
     function startHostLoserGrudgeMatch(p1Id, p2Id) {
-      const p1 = state.tourney.players.find(x => x.id === p1Id);
-      const p2 = state.tourney.players.find(x => x.id === p2Id);
+      let p1 = state.tourney.players.find(x => x.id === p1Id);
+      let p2 = state.tourney.players.find(x => x.id === p2Id);
       if (!p1 || !p2 || p1.status !== 'eliminated' || p2.status !== 'eliminated') return;
 
+      if (p1.isBot && !p2.isBot) {
+        const tmp = p1; p1 = p2; p2 = tmp;
+      }
       p1.status = 'fighting';
       p2.status = 'fighting';
       const matchId = `loser_${Date.now().toString(36)}`;
@@ -4518,13 +4710,24 @@
     function syncLocalPlayerWithTourneyState(prevMatchId) {
       if (!state.tourney.active) return;
 
+      if (state.tourney.phase === 'lobby') {
+        // Host reset tournament back to Room Lobby so players can change Fighter/Nickname!
+        state.roundLive = false;
+        if (state.screen !== 'home') showScreen('home');
+        document.getElementById('modalTourneyChampion').classList.add('hidden');
+        document.getElementById('modalOnlineLobby').classList.remove('hidden');
+        renderTournamentLobbyUI();
+        return;
+      }
+
       if (state.tourney.phase === 'champion') {
         document.getElementById('modalOnlineLobby').classList.add('hidden');
         if (state.screen !== 'arena') showScreen('arena');
+        state.roundLive = false;
         const champFighter = FIGHTERS[state.tourney.championFighterIdx || 0];
         document.getElementById('tourneyChampImg').src = champFighter.faceImg;
         document.getElementById('tourneyChampNick').textContent = `${state.tourney.championNick} WINS THE TOURNAMENT!`;
-        document.getElementById('tourneyChampSub').textContent = `Champion Fighter: ${champFighter.name} • Defeated all contenders!`;
+        document.getElementById('tourneyChampSub').textContent = `Champion Fighter: ${champFighter.name} • Click TOURNAMENT LOBBY below to change character/name & start a new tournament!`;
         document.getElementById('modalTourneyChampion').classList.remove('hidden');
         sfx.announce(`${state.tourney.championNick} is the Ultimate Champion!`, 'announcer');
         return;
@@ -4543,11 +4746,6 @@
         if (prevMatchId !== myActiveMatch.id || state.tourney.myMatchRole === 'spectator') {
           state.mode = 'tournament';
           state.tourney.currentMatchId = myActiveMatch.id;
-          if (myActiveMatch.p1IsBot && myActiveMatch.p2Id === state.tourney.myId) {
-            const tmpId = myActiveMatch.p1Id, tmpNick = myActiveMatch.p1Nick, tmpF = myActiveMatch.p1Fighter;
-            myActiveMatch.p1Id = myActiveMatch.p2Id; myActiveMatch.p1Nick = myActiveMatch.p2Nick; myActiveMatch.p1Fighter = myActiveMatch.p2Fighter; myActiveMatch.p1IsBot = false;
-            myActiveMatch.p2Id = tmpId; myActiveMatch.p2Nick = tmpNick; myActiveMatch.p2Fighter = tmpF; myActiveMatch.p2IsBot = true;
-          }
           state.tourney.myMatchRole = myActiveMatch.p1Id === state.tourney.myId ? 'p1' : 'p2';
           state.tourney.opponentIsBot = state.tourney.myMatchRole === 'p1' ? !!myActiveMatch.p2IsBot : !!myActiveMatch.p1IsBot;
           state.p1Index = myActiveMatch.p1Fighter;
@@ -4673,8 +4871,14 @@
         state.cinematic.frame = snap.cinematicFrame;
       }
       updateArenaHUD();
+
+      // If P2 receives a snapshot showing the match is won (p1Wins >= 2 or p2Wins >= 2), trigger finish check too!
+      if (state.tourney.myMatchRole === 'p2' && (state.p1Wins >= 2 || state.p2Wins >= 2)) {
+        handleTournamentLocalMatchFinished(state.p1Wins >= 2 ? 'p1' : 'p2');
+      }
     }
 
+    // Both P1 AND P2 report match completion with automatic retry so the Host NEVER misses a match win!
     function handleTournamentLocalMatchFinished(winnerSlot) {
       const m = state.tourney.matches.find(x => x.id === state.tourney.currentMatchId);
       if (!m || m.status === 'finished') return;
@@ -4684,22 +4888,90 @@
 
       if (state.onlineRole === 'host') {
         processHostMatchFinished(m.id, winnerId, loserId, state.p1Wins, state.p2Wins);
-      } else if (state.tourney.myMatchRole === 'p1') {
-        sendTourneyPacketToHost({
-          type: 'tourney_match_finished',
-          matchId: m.id,
-          winnerId,
-          loserId,
-          p1Wins: state.p1Wins,
-          p2Wins: state.p2Wins
+      } else {
+        const sendFinish = () => {
+          sendTourneyPacketToHost({
+            type: 'tourney_match_finished',
+            matchId: m.id,
+            winnerId,
+            loserId,
+            p1Wins: state.p1Wins,
+            p2Wins: state.p2Wins
+          });
+        };
+        sendFinish();
+        if (matchFinishRetryTimer) clearInterval(matchFinishRetryTimer);
+        let retries = 0;
+        matchFinishRetryTimer = setInterval(() => {
+          retries++;
+          const curM = state.tourney.matches.find(x => x.id === m.id);
+          if (!curM || curM.status === 'finished' || state.tourney.phase !== 'active' || retries > 10) {
+            clearInterval(matchFinishRetryTimer);
+            matchFinishRetryTimer = null;
+            return;
+          }
+          sendFinish();
+        }, 700);
+      }
+    }
+
+    function checkRoundAdvancementOnHost() {
+      if (state.onlineRole !== 'host' || state.tourney.phase !== 'active') return;
+
+      // If all HUMAN main-bracket matches in this round are finished and only Bot-vs-Bot matches remain, finish the Bot-vs-Bot matches immediately so Human Winners never wait on Bots!
+      const activeMain = state.tourney.matches.filter(x => x.bracket === 'main' && x.roundNum === state.tourney.roundNum && x.status === 'fighting');
+      const activeHumanMain = activeMain.filter(x => !x.p1IsBot || !x.p2IsBot);
+
+      if (activeHumanMain.length === 0 && activeMain.length > 0) {
+        activeMain.forEach(bm => {
+          if (bm._botTimer) clearTimeout(bm._botTimer);
+          bm.status = 'finished';
+          const p1Won = Math.random() < 0.5;
+          bm.winnerId = p1Won ? bm.p1Id : bm.p2Id;
+          bm.loserId = p1Won ? bm.p2Id : bm.p1Id;
+          const wP = state.tourney.players.find(p => p.id === bm.winnerId);
+          const lP = state.tourney.players.find(p => p.id === bm.loserId);
+          if (wP) { wP.status = 'advanced'; wP.wins = (wP.wins || 0) + 1; }
+          if (lP) { lP.status = 'eliminated'; }
         });
       }
+
+      const remainingMain = state.tourney.matches.filter(x => x.bracket === 'main' && x.roundNum === state.tourney.roundNum && x.status === 'fighting');
+      if (remainingMain.length === 0) {
+        const survivors = state.tourney.players.filter(p => p.status === 'advanced' || p.status === 'bye');
+        if (survivors.length === 1) {
+          const champ = survivors[0];
+          champ.status = 'champion';
+          state.tourney.phase = 'champion';
+          state.tourney.championId = champ.id;
+          state.tourney.championNick = champ.nickname;
+          state.tourney.championFighterIdx = champ.fighterIdx;
+          broadcastHostTourneyState();
+          syncLocalPlayerWithTourneyState(state.tourney.currentMatchId);
+          return true;
+        } else if (survivors.length >= 2) {
+          broadcastHostTourneyState();
+          syncLocalPlayerWithTourneyState(state.tourney.currentMatchId);
+          setTimeout(() => {
+            if (state.tourney.phase !== 'active') return;
+            const nextPool = state.tourney.players.filter(p => p.status === 'advanced' || p.status === 'bye');
+            if (nextPool.length === 1) {
+              checkRoundAdvancementOnHost();
+            } else if (nextPool.length >= 2) {
+              createHostBracketMatchesFromPool(nextPool, state.tourney.roundNum + 1);
+            }
+          }, 1500);
+          return true;
+        }
+      }
+      return false;
     }
 
     function processHostMatchFinished(matchId, winnerId, loserId, p1Wins, p2Wins) {
       const m = state.tourney.matches.find(x => x.id === matchId);
       if (!m || m.status === 'finished') return;
 
+      if (m._botTimer) { clearTimeout(m._botTimer); m._botTimer = null; }
       m.status = 'finished';
       m.winnerId = winnerId;
       m.loserId = loserId;
@@ -4717,30 +4989,7 @@
         if (losePlayer) {
           losePlayer.status = 'eliminated';
         }
-
-        const activeMain = state.tourney.matches.filter(x => x.bracket === 'main' && x.roundNum === state.tourney.roundNum && x.status === 'fighting');
-        if (activeMain.length === 0) {
-          const survivors = state.tourney.players.filter(p => p.status === 'advanced' || p.status === 'bye');
-          if (survivors.length === 1) {
-            const champ = survivors[0];
-            champ.status = 'champion';
-            state.tourney.phase = 'champion';
-            state.tourney.championId = champ.id;
-            state.tourney.championNick = champ.nickname;
-            state.tourney.championFighterIdx = champ.fighterIdx;
-            broadcastHostTourneyState();
-            syncLocalPlayerWithTourneyState(state.tourney.currentMatchId);
-            return;
-          } else if (survivors.length >= 2) {
-            broadcastHostTourneyState();
-            syncLocalPlayerWithTourneyState(state.tourney.currentMatchId);
-            setTimeout(() => {
-              if (state.tourney.phase !== 'active') return;
-              createHostBracketMatchesFromPool(survivors, state.tourney.roundNum + 1);
-            }, 3000);
-            return;
-          }
-        }
+        if (checkRoundAdvancementOnHost()) return;
       } else {
         if (winPlayer) {
           winPlayer.status = 'eliminated';
@@ -4778,10 +5027,7 @@
         toNick: target.nickname
       };
       if (state.onlineRole === 'host') {
-        const c = state.tourney.hostConns[target.id];
-        if (c && c.open) {
-          try { c.send(pkt); } catch (e) {}
-        }
+        sendTourneyPacketFromHost(pkt, target.id);
       } else {
         sendTourneyPacketToHost(pkt);
       }
@@ -4795,36 +5041,48 @@
 
       const players = state.tourney.players;
       const readyCount = players.filter(p => p.ready).length;
-      document.getElementById('tourneyOnlineCountBadge').textContent = `ONLINE PLAYERS: ${players.length} / ${MAX_TOURNEY_PLAYERS}`;
+      document.getElementById('tourneyOnlineCountBadge').textContent = `ONLINE: ${players.length} / ${MAX_TOURNEY_PLAYERS}`;
       document.getElementById('tourneyReadyCountBadge').textContent = `READY: ${readyCount} / ${players.length}`;
+
+      // Host vs Guest Button Visibility: ONLY Host can click "⚡ START TOURNAMENT" or "+ ADD AI BOT"!
+      const isGuest = state.onlineRole === 'guest';
+      const btnStartNow = document.getElementById('btnStartTourneyNow');
+      const btnAddBot = document.getElementById('btnAddTourneyBot');
+      if (btnStartNow) btnStartNow.classList.toggle('hidden', isGuest);
+      if (btnAddBot) btnAddBot.classList.toggle('hidden', isGuest);
 
       const me = players.find(p => p.id === state.tourney.myId);
       const btnReady = document.getElementById('btnTourneyReady');
       if (btnReady && me) {
         if (me.ready) {
-          btnReady.textContent = '✓ READY! (WAITING)';
-          btnReady.className = 'arcade-btn px-4 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-arcade font-black text-[10px] sm:text-xs tracking-wider uppercase shadow-md';
+          btnReady.textContent = isGuest ? '✓ READY (WAIT FOR HOST)' : '✓ READY';
+          btnReady.className = 'arcade-btn px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-arcade font-black text-[9px] sm:text-[10px] uppercase shadow-md';
         } else {
           btnReady.textContent = '✋ PRESS READY';
-          btnReady.className = 'arcade-btn px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-arcade font-black text-[10px] sm:text-xs tracking-wider uppercase shadow-md';
+          btnReady.className = 'arcade-btn px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-arcade font-black text-[9px] sm:text-[10px] uppercase shadow-md';
         }
       }
 
       grid.innerHTML = players.map((p, idx) => {
         const f = FIGHTERS[p.fighterIdx || 0];
         const isMe = p.id === state.tourney.myId;
+        const canKick = !isGuest && !isMe;
         const badge = p.ready
           ? '<span class="px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-arcade font-black text-[8px]">READY ✓</span>'
           : '<span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-arcade text-[8px]">WAITING</span>';
+        const kickBtn = canKick
+          ? `<button type="button" onclick="hostRemoveTournamentPlayer('${p.id}')" class="px-1.5 py-0.2 rounded bg-rose-600 hover:bg-rose-500 text-white font-arcade font-bold text-[8px] shrink-0" title="Remove player from room">✕ KICK</button>`
+          : '';
         return `
-          <div class="flex items-center gap-2 p-1.5 rounded-xl bg-slate-900 border ${isMe ? 'border-amber-400' : 'border-slate-800'}">
+          <div class="flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900 border ${isMe ? 'border-amber-400' : 'border-slate-800'}">
             <img src="${f.faceImg}" alt="${f.name}" class="w-8 h-8 rounded-lg object-cover border border-slate-700 shrink-0" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-1">
-                <span class="font-arcade font-bold text-[10px] text-white truncate">${idx + 1}. ${p.nickname}${isMe ? ' (YOU)' : ''}</span>
+                <span class="font-arcade font-bold text-[9px] sm:text-[10px] text-white truncate">${idx + 1}. ${p.nickname}${isMe ? ' (YOU)' : ''}</span>
+                ${kickBtn}
               </div>
               <div class="flex items-center justify-between gap-1 mt-0.5">
-                <span class="text-[9px] font-hud text-sky-300 truncate">${f.name}</span>
+                <span class="text-[8px] sm:text-[9px] font-hud text-sky-300 truncate">${f.name}</span>
                 ${badge}
               </div>
             </div>
@@ -4866,15 +5124,20 @@
         lobby: 'ONLINE'
       };
 
+      const isHost = state.onlineRole === 'host';
       document.getElementById('arenaTourneyPills').innerHTML = players.map(p => {
         const f = FIGHTERS[p.fighterIdx || 0];
         const cls = statusColors[p.status] || statusColors.lobby;
         const lbl = statusLabels[p.status] || 'ONLINE';
+        const kickMidMatch = (isHost && p.id !== state.tourney.myId)
+          ? `<button type="button" onclick="hostRemoveTournamentPlayer('${p.id}')" class="ml-0.5 px-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[7px] font-bold" title="Remove / Forfeit Player">✕</button>`
+          : '';
         return `
           <div class="flex items-center gap-1 px-1.5 py-0.2 rounded-full border ${cls} shrink-0 text-[8px] font-arcade leading-tight">
             <img src="${f.faceImg}" class="w-3.5 h-3.5 rounded-full object-cover" />
             <span class="font-bold">${p.nickname}</span>
             <span class="opacity-80 text-[7px]">${lbl}</span>
+            ${kickMidMatch}
           </div>
         `;
       }).join('');
@@ -4885,21 +5148,24 @@
         specDock.classList.remove('hidden');
         document.getElementById('arenaFightpadContainer')?.classList.add('hidden');
 
-        document.getElementById('specDockRound').textContent = `TOURNAMENT ROUND ${state.tourney.roundNum}`;
+        document.getElementById('specDockRound').textContent = `RND ${state.tourney.roundNum}`;
+        const timerEl = document.getElementById('specDockTimer');
+        if (timerEl) timerEl.textContent = `⏱ ${state.tourney.roundTimeLeft ?? TOURNEY_ROUND_MAX_SEC}s`;
+
         if (me?.status === 'eliminated') {
           document.getElementById('specDockBadge').textContent = '💀 ELIMINATED';
-          document.getElementById('specDockBadge').className = 'px-2 py-0.5 rounded bg-rose-600 text-white font-arcade font-black text-[9px]';
-          document.getElementById('specDockSub').textContent = 'Spectate ongoing matches or challenge another loser!';
+          document.getElementById('specDockBadge').className = 'px-1.5 py-0.5 rounded bg-rose-600 text-white font-arcade font-black text-[8px]';
+          document.getElementById('specDockSub').textContent = 'Spectate live matches, challenge a loser, or return to Room!';
         } else {
-          document.getElementById('specDockBadge').textContent = '🏆 ADVANCING';
-          document.getElementById('specDockBadge').className = 'px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-arcade font-black text-[9px]';
-          document.getElementById('specDockSub').textContent = 'Waiting for other matches in this round to finish...';
+          document.getElementById('specDockBadge').textContent = '🏆 WINNER • ADVANCING';
+          document.getElementById('specDockBadge').className = 'px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-arcade font-black text-[8px]';
+          document.getElementById('specDockSub').textContent = 'You won your match! Waiting for remaining human match to finish...';
         }
 
         const ongoing = state.tourney.matches.filter(m => m.status === 'fighting');
         const matchesEl = document.getElementById('specMatchesList');
         if (ongoing.length === 0) {
-          matchesEl.innerHTML = `<span class="text-[10px] font-hud text-slate-400">Preparing next round pairings...</span>`;
+          matchesEl.innerHTML = `<span class="text-[10px] font-hud text-emerald-400">Launching next bracket round...</span>`;
         } else {
           matchesEl.innerHTML = ongoing.map(m => {
             const isWatching = m.id === state.tourney.currentMatchId;
@@ -4914,7 +5180,7 @@
         const losersEl = document.getElementById('specLosersList');
         const availableLosers = players.filter(p => p.status === 'eliminated' && p.id !== state.tourney.myId);
         if (me?.status !== 'eliminated') {
-          losersEl.innerHTML = `<span class="text-[10px] font-hud text-emerald-400">You are still in the Winners Bracket!</span>`;
+          losersEl.innerHTML = `<span class="text-[10px] font-hud text-emerald-400">You advanced to Round ${state.tourney.roundNum + 1}! Next fight starts automatically.</span>`;
         } else if (availableLosers.length === 0) {
           losersEl.innerHTML = `<span class="text-[10px] font-hud text-slate-400">Waiting for other eliminated players...</span>`;
         } else {
