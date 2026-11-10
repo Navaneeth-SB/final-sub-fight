@@ -6,6 +6,7 @@
   <title>Final Sub Fight — 1v1 Arcade Fighter</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&family=Orbitron:wght@700;800;900&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
@@ -3710,8 +3711,38 @@
     }
 
     // =========================================================================
-    // 10. ONLINE PEERJS WEBRTC MULTIPLAYER LOGIC
+    // 10. DUAL-TRANSPORT ONLINE ENGINE (WEBSOCKET CLOUD RELAY + PEERJS WEBRTC)
     // =========================================================================
+    const PEER_ICE_CONFIG = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ]
+      }
+    };
+
+    let mqttClient = null;
+    let mqttTopic = '';
+    let joinRetryTimer = null;
+    const seenPacketIds = new Set();
+
     function generateRoomCode() {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let code = '';
@@ -3719,41 +3750,165 @@
       return code;
     }
 
+    function tagPacket(data) {
+      if (!data._pktId) {
+        data._pktId = state.tourney.myId + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+      }
+      data._senderId = state.tourney.myId;
+      return data;
+    }
+
+    function isDuplicatePacket(msg) {
+      if (!msg || typeof msg !== 'object') return true;
+      if (msg._senderId === state.tourney.myId) return true;
+      if (msg._pktId) {
+        if (seenPacketIds.has(msg._pktId)) return true;
+        seenPacketIds.add(msg._pktId);
+        if (seenPacketIds.size > 600) {
+          const first = seenPacketIds.values().next().value;
+          seenPacketIds.delete(first);
+        }
+      }
+      return false;
+    }
+
+    // Connects WebSocket MQTT Cloud Room Channel (100% firewall/NAT proof across mobile 4G/5G & Wi-Fi)
+    function connectRoomCloudRelay(roomCode, onOpenCallback) {
+      if (typeof mqtt === 'undefined') {
+        if (onOpenCallback) onOpenCallback();
+        return;
+      }
+      if (mqttClient) {
+        try { mqttClient.end(true); } catch (e) {}
+        mqttClient = null;
+      }
+      mqttTopic = `finalsubfight/v3/room/${roomCode}`;
+      const brokers = [
+        'wss://broker.emqx.io:8084/mqtt',
+        'wss://broker.hivemq.com:8884/mqtt'
+      ];
+      let connected = false;
+
+      const tryBroker = (idx) => {
+        if (idx >= brokers.length || connected) return;
+        try {
+          const client = mqtt.connect(brokers[idx], {
+            clientId: 'fsf_' + state.tourney.myId + '_' + Math.random().toString(16).slice(2, 6),
+            clean: true,
+            connectTimeout: 4000,
+            reconnectPeriod: 2000
+          });
+          client.on('connect', () => {
+            if (connected) {
+              try { client.end(true); } catch (e) {}
+              return;
+            }
+            connected = true;
+            mqttClient = client;
+            client.subscribe(mqttTopic, { qos: 0 }, () => {
+              if (onOpenCallback) onOpenCallback();
+            });
+          });
+          client.on('message', (topic, payload) => {
+            if (topic !== mqttTopic) return;
+            try {
+              const msg = JSON.parse(payload.toString());
+              handleIncomingNetworkMessage(msg, null);
+            } catch (e) {}
+          });
+          client.on('error', () => {
+            if (!connected) tryBroker(idx + 1);
+          });
+        } catch (e) {
+          tryBroker(idx + 1);
+        }
+      };
+      tryBroker(0);
+    }
+
+    function sendViaCloudRelay(data) {
+      if (mqttClient && mqttClient.connected && mqttTopic) {
+        try {
+          mqttClient.publish(mqttTopic, JSON.stringify(data), { qos: 0 });
+        } catch (e) {}
+      }
+    }
+
     function sendOnlinePacket(data) {
+      tagPacket(data);
+      sendViaCloudRelay(data);
       if (state.conn && state.conn.open) {
         try { state.conn.send(data); } catch (err) {}
+      }
+    }
+
+    function handleIncomingDuelMessage(msg) {
+      if (msg.type === 'duel_join' && state.onlineRole === 'host') {
+        sendOnlinePacket({ type: 'duel_welcome', p1Index: state.p1Index, p2Index: state.p2Index, stageKey: state.stageKey });
+        document.getElementById('onlineStatusText').textContent = 'Friend Connected! Entering Character Select...';
+        sfx.confirm();
+        setTimeout(() => {
+          document.getElementById('modalOnlineLobby').classList.add('hidden');
+          showScreen('select');
+        }, 400);
+      } else if (msg.type === 'duel_welcome' && state.onlineRole === 'guest') {
+        if (joinRetryTimer) { clearInterval(joinRetryTimer); joinRetryTimer = null; }
+        document.getElementById('onlineStatusText').textContent = 'Connected to Host! Entering Character Select...';
+        sfx.confirm();
+        setTimeout(() => {
+          document.getElementById('modalOnlineLobby').classList.add('hidden');
+          showScreen('select');
+        }, 400);
+      } else if (msg.type === 'select') {
+        if (typeof msg.p1Index === 'number') state.p1Index = msg.p1Index;
+        if (typeof msg.p2Index === 'number') state.p2Index = msg.p2Index;
+        if (msg.stageKey) state.stageKey = msg.stageKey;
+        renderSelectScreen();
+      } else if (msg.type === 'startArena') {
+        state.p1Index = msg.p1Index;
+        state.p2Index = msg.p2Index;
+        state.stageKey = msg.stageKey;
+        showScreen('arena');
+      } else if (msg.type === 'act') {
+        const targetPlayer = msg.who === 'p1' ? state.p1 : state.p2;
+        if (typeof msg.x === 'number') targetPlayer.x = msg.x;
+        if (typeof msg.y === 'number') targetPlayer.y = msg.y;
+        performFighterAction(msg.who, msg.act);
+      }
+    }
+
+    function handleIncomingNetworkMessage(msg, conn) {
+      if (isDuplicatePacket(msg)) return;
+      if (msg._targetId && msg._targetId !== state.tourney.myId) return;
+
+      if (state.onlineSubMode === 'duel' || msg.type?.startsWith('duel_') || ['select', 'startArena', 'act'].includes(msg.type)) {
+        handleIncomingDuelMessage(msg);
+        return;
+      }
+
+      if (state.onlineRole === 'host') {
+        handleHostIncomingTourneyMsg(msg, conn);
+      } else if (state.onlineRole === 'guest') {
+        handleGuestIncomingTourneyMsg(msg);
       }
     }
 
     function bindOnlineConnection(conn) {
       state.conn = conn;
       conn.on('open', () => {
-        document.getElementById('onlineStatusText').textContent = 'Friend Connected! Entering Character Select...';
-        sfx.confirm();
-        setTimeout(() => {
-          document.getElementById('modalOnlineLobby').classList.add('hidden');
-          showScreen('select');
-        }, 600);
-      });
-      conn.on('data', msg => {
-        if (!msg || typeof msg !== 'object') return;
-        if (msg.type === 'select') {
-          if (typeof msg.p1Index === 'number') state.p1Index = msg.p1Index;
-          if (typeof msg.p2Index === 'number') state.p2Index = msg.p2Index;
-          if (msg.stageKey) state.stageKey = msg.stageKey;
-          renderSelectScreen();
-        } else if (msg.type === 'startArena') {
-          state.p1Index = msg.p1Index;
-          state.p2Index = msg.p2Index;
-          state.stageKey = msg.stageKey;
-          showScreen('arena');
-        } else if (msg.type === 'act') {
-          const targetPlayer = msg.who === 'p1' ? state.p1 : state.p2;
-          if (typeof msg.x === 'number') targetPlayer.x = msg.x;
-          if (typeof msg.y === 'number') targetPlayer.y = msg.y;
-          performFighterAction(msg.who, msg.act);
+        if (state.onlineRole === 'guest') {
+          sendOnlinePacket({ type: 'duel_join' });
+        } else {
+          sendOnlinePacket({ type: 'duel_welcome', p1Index: state.p1Index, p2Index: state.p2Index, stageKey: state.stageKey });
+          document.getElementById('onlineStatusText').textContent = 'Friend Connected! Entering Character Select...';
+          sfx.confirm();
+          setTimeout(() => {
+            document.getElementById('modalOnlineLobby').classList.add('hidden');
+            showScreen('select');
+          }, 500);
         }
       });
+      conn.on('data', msg => handleIncomingNetworkMessage(msg, conn));
     }
 
     // =========================================================================
@@ -3815,9 +3970,18 @@
       if (btnReady) {
         btnReady.addEventListener('click', () => {
           sfx.confirm();
+          const typedCode = (document.getElementById('inputJoinCode')?.value || '').trim().toUpperCase();
+          // If the user typed a friend's Room Code in the Join box and pressed READY without clicking JOIN first, auto-join that room!
+          if (typedCode.length >= 4 && state.onlineRole !== 'host' && state.roomCode !== typedCode) {
+            state.tourney.myPendingReady = true;
+            document.getElementById('btnJoinRoom')?.click();
+            return;
+          }
+
           const me = state.tourney.players.find(p => p.id === state.tourney.myId);
           if (!me) return;
           me.ready = !me.ready;
+          state.tourney.myPendingReady = me.ready;
           me.nickname = (document.getElementById('inputOnlineNickname').value.trim().toUpperCase() || 'FIGHTER').slice(0, 14);
           me.fighterIdx = parseInt(document.getElementById('selectOnlineFighter').value, 10) || 0;
 
@@ -3832,6 +3996,9 @@
           } else {
             state.onlineRole = 'host';
             state.tourney.active = true;
+            if (!state.roomCode) {
+              document.getElementById('btnCreateRoom')?.click();
+            }
             checkAndStartHostTournamentRound();
             broadcastHostTourneyState();
           }
@@ -4004,8 +4171,28 @@
     }
 
     function sendTourneyPacketToHost(packet) {
+      tagPacket(packet);
+      sendViaCloudRelay(packet);
       if (state.conn && state.conn.open) {
         try { state.conn.send(packet); } catch (e) {}
+      }
+    }
+
+    function sendTourneyPacketFromHost(packet, targetPlayerId = null) {
+      if (targetPlayerId) packet._targetId = targetPlayerId;
+      tagPacket(packet);
+      sendViaCloudRelay(packet);
+      if (targetPlayerId) {
+        const c = state.tourney.hostConns[targetPlayerId];
+        if (c && c.open) {
+          try { c.send(packet); } catch (e) {}
+        }
+      } else {
+        Object.values(state.tourney.hostConns).forEach(c => {
+          if (c && c.open) {
+            try { c.send(packet); } catch (e) {}
+          }
+        });
       }
     }
 
@@ -4022,122 +4209,171 @@
         championFighterIdx: state.tourney.championFighterIdx,
         stageKey: state.stageKey
       };
-      Object.values(state.tourney.hostConns).forEach(c => {
-        if (c && c.open) {
-          try { c.send(payload); } catch (e) {}
-        }
-      });
+      sendTourneyPacketFromHost(payload, null);
       renderTournamentLobbyUI();
       renderArenaTournamentHUD();
     }
 
-    function bindHostTourneyGuestConnection(conn) {
-      conn.on('data', msg => {
-        if (!msg || typeof msg !== 'object') return;
+    function handleHostIncomingTourneyMsg(msg, conn) {
+      if (msg.type === 'tourney_join') {
+        const isExisting = state.tourney.players.some(p => p.id === msg.id);
+        if (state.tourney.players.length >= MAX_TOURNEY_PLAYERS && !isExisting) {
+          sendTourneyPacketFromHost({ type: 'tourney_full' }, msg.id);
+          return;
+        }
+        if (conn) {
+          state.tourney.hostConns[msg.id] = conn;
+          conn._playerId = msg.id;
+        }
+        let existing = state.tourney.players.find(p => p.id === msg.id);
+        if (!existing) {
+          state.tourney.players.push({
+            id: msg.id,
+            nickname: (msg.nickname || 'PLAYER').slice(0, 14),
+            fighterIdx: msg.fighterIdx || 0,
+            ready: !!msg.ready,
+            isBot: false,
+            status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
+            wins: 0,
+            grudgeWins: 0
+          });
+          sfx.confirm();
+          document.getElementById('onlineStatusText').textContent = `✓ ${msg.nickname} joined Room ${state.roomCode} (${state.tourney.players.length}/10)!`;
+        } else {
+          existing.nickname = (msg.nickname || existing.nickname).slice(0, 14);
+          existing.fighterIdx = msg.fighterIdx ?? existing.fighterIdx;
+          if (typeof msg.ready === 'boolean') existing.ready = msg.ready;
+        }
+        broadcastHostTourneyState();
+        checkAndStartHostTournamentRound();
 
-        if (state.onlineSubMode === 'duel') {
-          if (msg.type === 'select') {
-            if (typeof msg.p1Index === 'number') state.p1Index = msg.p1Index;
-            if (typeof msg.p2Index === 'number') state.p2Index = msg.p2Index;
-            if (msg.stageKey) state.stageKey = msg.stageKey;
-            renderSelectScreen();
-          } else if (msg.type === 'startArena') {
-            state.p1Index = msg.p1Index;
-            state.p2Index = msg.p2Index;
-            state.stageKey = msg.stageKey;
-            showScreen('arena');
-          } else if (msg.type === 'act') {
-            const targetPlayer = msg.who === 'p1' ? state.p1 : state.p2;
-            if (typeof msg.x === 'number') targetPlayer.x = msg.x;
-            if (typeof msg.y === 'number') targetPlayer.y = msg.y;
-            performFighterAction(msg.who, msg.act);
+      } else if (msg.type === 'tourney_UpdatePlayer') {
+        let p = state.tourney.players.find(x => x.id === msg.id);
+        if (!p && state.tourney.players.length < MAX_TOURNEY_PLAYERS) {
+          p = {
+            id: msg.id,
+            nickname: (msg.nickname || 'PLAYER').slice(0, 14),
+            fighterIdx: msg.fighterIdx || 0,
+            ready: !!msg.ready,
+            isBot: false,
+            status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
+            wins: 0,
+            grudgeWins: 0
+          };
+          state.tourney.players.push(p);
+        }
+        if (p) {
+          p.nickname = (msg.nickname || p.nickname).slice(0, 14);
+          p.fighterIdx = msg.fighterIdx ?? p.fighterIdx;
+          p.ready = !!msg.ready;
+          broadcastHostTourneyState();
+          checkAndStartHostTournamentRound();
+        }
+
+      } else if (msg.type === 'tourney_p2_act') {
+        const m = state.tourney.matches.find(x => x.id === msg.matchId);
+        if (!m) return;
+        if (m.p1Id === state.tourney.myId) {
+          state.p2._remoteTriggered = true;
+          performFighterAction('p2', msg.act);
+          state.p2._remoteTriggered = false;
+        } else {
+          sendTourneyPacketFromHost(msg, m.p1Id);
+        }
+
+      } else if (msg.type === 'tourney_snapshot') {
+        if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole !== 'p1') {
+          applyRemoteMatchSnapshot(msg);
+        }
+        // Also forward to PeerJS guests in case any guest is only on PeerJS
+        Object.entries(state.tourney.hostConns).forEach(([pid, c]) => {
+          if (pid !== msg._senderId && c && c.open) {
+            try { c.send(msg); } catch (e) {}
           }
+        });
+
+      } else if (msg.type === 'tourney_match_finished') {
+        processHostMatchFinished(msg.matchId, msg.winnerId, msg.loserId, msg.p1Wins, msg.p2Wins);
+
+      } else if (msg.type === 'tourney_challenge_request') {
+        if (msg.toId === state.tourney.myId) {
+          showIncomingChallengeToast(msg.fromId, msg.fromNick);
+        } else {
+          sendTourneyPacketFromHost(msg, msg.toId);
+        }
+
+      } else if (msg.type === 'tourney_accept_challenge') {
+        startHostLoserGrudgeMatch(msg.fromId, msg.toId);
+      }
+    }
+
+    function handleGuestIncomingTourneyMsg(msg) {
+      if (msg.type === 'tourney_full') {
+        if (joinRetryTimer) { clearInterval(joinRetryTimer); joinRetryTimer = null; }
+        document.getElementById('onlineStatusText').textContent = 'Room is full (Max 10/10 players)!';
+        return;
+      }
+      if (msg.type === 'tourney_state') {
+        const amIInRoom = (msg.players || []).some(p => p.id === state.tourney.myId);
+        if (amIInRoom) {
+          if (joinRetryTimer) {
+            clearInterval(joinRetryTimer);
+            joinRetryTimer = null;
+            sfx.confirm();
+            document.getElementById('onlineStatusText').textContent = `✓ Joined Room ${state.roomCode} (${msg.players.length}/10)! Tap PRESS READY when set.`;
+            const joinBtn = document.getElementById('btnJoinRoom');
+            if (joinBtn) joinBtn.textContent = '✓ JOINED';
+          }
+        } else {
+          // Host broadcasted state but hasn't seen our join packet yet -> send join immediately!
+          sendTourneyPacketToHost({
+            type: 'tourney_join',
+            id: state.tourney.myId,
+            nickname: state.tourney.myNickname,
+            fighterIdx: state.tourney.myFighterIdx,
+            ready: state.tourney.myPendingReady || false
+          });
           return;
         }
 
-        if (msg.type === 'tourney_join') {
-          if (state.tourney.players.length >= MAX_TOURNEY_PLAYERS && !state.tourney.players.some(p => p.id === msg.id)) {
-            try { conn.send({ type: 'tourney_full' }); } catch (e) {}
-            return;
-          }
-          state.tourney.hostConns[msg.id] = conn;
-          conn._playerId = msg.id;
-          let existing = state.tourney.players.find(p => p.id === msg.id);
-          if (!existing) {
-            state.tourney.players.push({
-              id: msg.id,
-              nickname: (msg.nickname || 'PLAYER').slice(0, 14),
-              fighterIdx: msg.fighterIdx || 0,
-              ready: false,
-              isBot: false,
-              status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
-              wins: 0,
-              grudgeWins: 0
-            });
-          } else {
-            existing.nickname = (msg.nickname || existing.nickname).slice(0, 14);
-            existing.fighterIdx = msg.fighterIdx ?? existing.fighterIdx;
-          }
-          sfx.confirm();
-          document.getElementById('onlineStatusText').textContent = `${msg.nickname} joined the Tournament Room (${state.tourney.players.length}/10)!`;
-          broadcastHostTourneyState();
+        const prevMatchId = state.tourney.currentMatchId;
+        state.tourney.phase = msg.phase;
+        state.tourney.roundNum = msg.roundNum;
+        state.tourney.players = msg.players || [];
+        state.tourney.matches = msg.matches || [];
+        state.tourney.championId = msg.championId;
+        state.tourney.championNick = msg.championNick;
+        state.tourney.championFighterIdx = msg.championFighterIdx;
+        if (msg.stageKey) state.stageKey = msg.stageKey;
 
-        } else if (msg.type === 'tourney_UpdatePlayer') {
-          const p = state.tourney.players.find(x => x.id === msg.id);
-          if (p) {
-            p.nickname = (msg.nickname || p.nickname).slice(0, 14);
-            p.fighterIdx = msg.fighterIdx ?? p.fighterIdx;
-            p.ready = !!msg.ready;
-            broadcastHostTourneyState();
-            checkAndStartHostTournamentRound();
-          }
+        renderTournamentLobbyUI();
+        syncLocalPlayerWithTourneyState(prevMatchId);
+        renderArenaTournamentHUD();
 
-        } else if (msg.type === 'tourney_p2_act') {
-          const m = state.tourney.matches.find(x => x.id === msg.matchId);
-          if (!m) return;
-          if (m.p1Id === state.tourney.myId) {
-            state.p2._remoteTriggered = true;
-            performFighterAction('p2', msg.act);
-            state.p2._remoteTriggered = false;
-          } else {
-            const p1Conn = state.tourney.hostConns[m.p1Id];
-            if (p1Conn && p1Conn.open) {
-              try { p1Conn.send(msg); } catch (e) {}
-            }
-          }
-
-        } else if (msg.type === 'tourney_snapshot') {
-          if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole !== 'p1') {
-            applyRemoteMatchSnapshot(msg);
-          }
-          Object.entries(state.tourney.hostConns).forEach(([pid, c]) => {
-            if (pid !== conn._playerId && c && c.open) {
-              try { c.send(msg); } catch (e) {}
-            }
-          });
-
-        } else if (msg.type === 'tourney_match_finished') {
-          if (state.onlineRole === 'host') {
-            processHostMatchFinished(msg.matchId, msg.winnerId, msg.loserId, msg.p1Wins, msg.p2Wins);
-          }
-
-        } else if (msg.type === 'tourney_challenge_request') {
-          if (msg.toId === state.tourney.myId) {
-            showIncomingChallengeToast(msg.fromId, msg.fromNick);
-          } else {
-            const targetConn = state.tourney.hostConns[msg.toId];
-            if (targetConn && targetConn.open) {
-              try { targetConn.send(msg); } catch (e) {}
-            }
-          }
-
-        } else if (msg.type === 'tourney_accept_challenge') {
-          if (state.onlineRole === 'host') {
-            startHostLoserGrudgeMatch(msg.fromId, msg.toId);
-          }
+      } else if (msg.type === 'tourney_p2_act') {
+        if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole === 'p1') {
+          state.p2._remoteTriggered = true;
+          performFighterAction('p2', msg.act);
+          state.p2._remoteTriggered = false;
         }
-      });
 
+      } else if (msg.type === 'tourney_snapshot') {
+        if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole !== 'p1') {
+          applyRemoteMatchSnapshot(msg);
+        }
+
+      } else if (msg.type === 'tourney_challenge_request') {
+        if (msg.toId === state.tourney.myId) {
+          showIncomingChallengeToast(msg.fromId, msg.fromNick);
+        }
+      }
+    }
+
+    function bindHostTourneyGuestConnection(conn) {
+      conn.on('open', () => {
+        broadcastHostTourneyState();
+      });
+      conn.on('data', msg => handleIncomingNetworkMessage(msg, conn));
       conn.on('close', () => {
         if (conn._playerId) {
           delete state.tourney.hostConns[conn._playerId];
@@ -4151,64 +4387,19 @@
       state.conn = conn;
       conn.on('open', () => {
         if (state.onlineSubMode === 'duel') {
-          document.getElementById('onlineStatusText').textContent = 'Friend Connected! Entering Character Select...';
-          sfx.confirm();
-          setTimeout(() => {
-            document.getElementById('modalOnlineLobby').classList.add('hidden');
-            showScreen('select');
-          }, 600);
+          sendOnlinePacket({ type: 'duel_join' });
           return;
         }
         state.tourney.active = true;
-        document.getElementById('onlineStatusText').textContent = 'Connected to Tournament Room! Press READY when set.';
-        sfx.confirm();
         sendTourneyPacketToHost({
           type: 'tourney_join',
           id: state.tourney.myId,
           nickname: state.tourney.myNickname,
-          fighterIdx: state.tourney.myFighterIdx
+          fighterIdx: state.tourney.myFighterIdx,
+          ready: state.tourney.myPendingReady || false
         });
       });
-
-      conn.on('data', msg => {
-        if (!msg || typeof msg !== 'object') return;
-        if (msg.type === 'tourney_full') {
-          document.getElementById('onlineStatusText').textContent = 'Room is full (Max 10/10 players)!';
-          return;
-        }
-        if (msg.type === 'tourney_state') {
-          const prevMatchId = state.tourney.currentMatchId;
-          state.tourney.phase = msg.phase;
-          state.tourney.roundNum = msg.roundNum;
-          state.tourney.players = msg.players || [];
-          state.tourney.matches = msg.matches || [];
-          state.tourney.championId = msg.championId;
-          state.tourney.championNick = msg.championNick;
-          state.tourney.championFighterIdx = msg.championFighterIdx;
-          if (msg.stageKey) state.stageKey = msg.stageKey;
-
-          renderTournamentLobbyUI();
-          syncLocalPlayerWithTourneyState(prevMatchId);
-          renderArenaTournamentHUD();
-
-        } else if (msg.type === 'tourney_p2_act') {
-          if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole === 'p1') {
-            state.p2._remoteTriggered = true;
-            performFighterAction('p2', msg.act);
-            state.p2._remoteTriggered = false;
-          }
-
-        } else if (msg.type === 'tourney_snapshot') {
-          if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole !== 'p1') {
-            applyRemoteMatchSnapshot(msg);
-          }
-
-        } else if (msg.type === 'tourney_challenge_request') {
-          if (msg.toId === state.tourney.myId) {
-            showIncomingChallengeToast(msg.fromId, msg.fromNick);
-          }
-        }
-      });
+      conn.on('data', msg => handleIncomingNetworkMessage(msg, conn));
     }
 
     function showIncomingChallengeToast(fromId, fromNick) {
@@ -4457,11 +4648,7 @@
       };
 
       if (state.onlineRole === 'host') {
-        Object.values(state.tourney.hostConns).forEach(c => {
-          if (c && c.open) {
-            try { c.send(snap); } catch (e) {}
-          }
-        });
+        sendTourneyPacketFromHost(snap, null);
       } else {
         sendTourneyPacketToHost(snap);
       }
@@ -4775,32 +4962,51 @@
       });
 
       document.getElementById('btnCreateRoom').addEventListener('click', () => {
+        if (joinRetryTimer) { clearInterval(joinRetryTimer); joinRetryTimer = null; }
         const code = generateRoomCode();
         state.roomCode = code;
         state.onlineRole = 'host';
         state.tourney.active = (state.onlineSubMode === 'tournament');
         state.tourney.hostConns = {};
-        syncMyTourneyProfile();
+
+        // Ensure Host is in state.tourney.players
+        const nick = (document.getElementById('inputOnlineNickname')?.value || 'HOST').trim().toUpperCase().slice(0, 14) || 'HOST';
+        const fIdx = parseInt(document.getElementById('selectOnlineFighter')?.value || '0', 10) || 0;
+        state.tourney.myNickname = nick;
+        state.tourney.myFighterIdx = fIdx;
+        if (!state.tourney.players.some(p => p.id === state.tourney.myId)) {
+          resetLocalTournamentLobby();
+        } else {
+          syncMyTourneyProfile();
+        }
 
         document.getElementById('onlineRoomCodeDisplay').textContent = code;
         document.getElementById('btnCopyRoomCode').classList.remove('hidden');
-        document.getElementById('onlineStatusText').textContent = state.onlineSubMode === 'tournament'
-          ? `Tournament Room ${code} Live! Up to 10 friends can join & press READY.`
-          : 'Waiting for friend to join with this code...';
+        document.getElementById('onlineStatusText').textContent = `Opening Room ${code}...`;
 
-        if (typeof Peer === 'undefined') {
-          document.getElementById('onlineStatusText').textContent = 'Local Tournament Lobby ready! Add AI Bots & press READY.';
-          return;
+        // 1) Connect Cloud WebSocket Relay (Works across all mobile 4G/5G & Wi-Fi networks!)
+        connectRoomCloudRelay(code, () => {
+          document.getElementById('onlineStatusText').textContent = state.onlineSubMode === 'tournament'
+            ? `✓ Room ${code} LIVE! Share code ${code} — up to 10 friends can join!`
+            : `✓ Room ${code} LIVE! Waiting for friend to join...`;
+          broadcastHostTourneyState();
+        });
+
+        // 2) Also open PeerJS WebRTC endpoint in parallel
+        if (typeof Peer !== 'undefined') {
+          if (state.peer) { try { state.peer.destroy(); } catch (e) {} }
+          state.peer = new Peer('tekkaro-room-' + code, PEER_ICE_CONFIG);
+          state.peer.on('open', () => {
+            document.getElementById('onlineStatusText').textContent = state.onlineSubMode === 'tournament'
+              ? `✓ Room ${code} LIVE! Share code ${code} — up to 10 friends can join!`
+              : `✓ Room ${code} LIVE! Waiting for friend to join...`;
+          });
+          state.peer.on('connection', conn => {
+            if (state.onlineSubMode === 'duel') bindOnlineConnection(conn);
+            else bindHostTourneyGuestConnection(conn);
+          });
+          state.peer.on('error', () => {});
         }
-        if (state.peer) state.peer.destroy();
-        state.peer = new Peer('tekkaro-room-' + code, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] } });
-        state.peer.on('connection', conn => {
-          if (state.onlineSubMode === 'duel') bindOnlineConnection(conn);
-          else bindHostTourneyGuestConnection(conn);
-        });
-        state.peer.on('error', () => {
-          document.getElementById('onlineStatusText').textContent = 'Connection error. Try generating a new room.';
-        });
       });
 
       document.getElementById('btnCopyRoomCode').addEventListener('click', () => {
@@ -4816,31 +5022,68 @@
       });
 
       document.getElementById('btnJoinRoom').addEventListener('click', () => {
-        const code = document.getElementById('inputJoinCode').value.trim().toUpperCase();
-        const nick = document.getElementById('inputOnlineNickname').value.trim().toUpperCase();
-        if (!nick) {
-          document.getElementById('onlineStatusText').textContent = 'Please enter your Nickname before joining!';
-          document.getElementById('inputOnlineNickname').focus();
+        const rawCode = document.getElementById('inputJoinCode').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const nick = (document.getElementById('inputOnlineNickname').value.trim().toUpperCase() || 'PLAYER').slice(0, 14);
+        if (rawCode.length < 4) {
+          document.getElementById('onlineStatusText').textContent = 'Please enter the 6-character Room Code from your friend!';
+          document.getElementById('inputJoinCode').focus();
           return;
         }
-        if (code.length < 4 || typeof Peer === 'undefined') {
-          document.getElementById('onlineStatusText').textContent = 'Enter a valid 6-letter Room Code.';
-          return;
-        }
-        state.tourney.myNickname = nick.slice(0, 14);
+        sfx.click();
+        state.tourney.myNickname = nick;
         state.tourney.myFighterIdx = parseInt(document.getElementById('selectOnlineFighter').value, 10) || 0;
-        state.roomCode = code;
+        state.roomCode = rawCode;
         state.onlineRole = 'guest';
-        document.getElementById('onlineRoomCodeDisplay').textContent = code;
-        document.getElementById('onlineStatusText').textContent = `Connecting to Room ${code} as ${state.tourney.myNickname}...`;
+        state.tourney.active = (state.onlineSubMode === 'tournament');
 
-        if (state.peer) state.peer.destroy();
-        state.peer = new Peer(undefined, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] } });
-        state.peer.on('open', () => {
-          const conn = state.peer.connect('tekkaro-room-' + code);
-          if (state.onlineSubMode === 'duel') bindOnlineConnection(conn);
-          else bindGuestTourneyConnection(conn);
+        document.getElementById('onlineRoomCodeDisplay').textContent = rawCode;
+        document.getElementById('onlineStatusText').textContent = `Joining Room ${rawCode} as ${nick}...`;
+        const joinBtn = document.getElementById('btnJoinRoom');
+        if (joinBtn) joinBtn.textContent = 'JOINING...';
+
+        const sendJoinAttempt = () => {
+          if (state.onlineSubMode === 'duel') {
+            sendOnlinePacket({ type: 'duel_join' });
+          } else {
+            sendTourneyPacketToHost({
+              type: 'tourney_join',
+              id: state.tourney.myId,
+              nickname: state.tourney.myNickname,
+              fighterIdx: state.tourney.myFighterIdx,
+              ready: state.tourney.myPendingReady || false
+            });
+          }
+        };
+
+        // Retry join handshake every 650ms until Host replies with tourney_state / duel_welcome!
+        if (joinRetryTimer) clearInterval(joinRetryTimer);
+        let attempts = 0;
+        joinRetryTimer = setInterval(() => {
+          attempts++;
+          sendJoinAttempt();
+          if (attempts > 25) {
+            clearInterval(joinRetryTimer);
+            joinRetryTimer = null;
+            if (joinBtn) joinBtn.textContent = 'JOIN';
+          }
+        }, 650);
+
+        // 1) Connect via Cloud WebSocket Relay immediately
+        connectRoomCloudRelay(rawCode, () => {
+          sendJoinAttempt();
         });
+
+        // 2) Connect via PeerJS WebRTC with TURN + STUN in parallel
+        if (typeof Peer !== 'undefined') {
+          if (state.peer) { try { state.peer.destroy(); } catch (e) {} }
+          state.peer = new Peer(undefined, PEER_ICE_CONFIG);
+          state.peer.on('open', () => {
+            const conn = state.peer.connect('tekkaro-room-' + rawCode, { reliable: true });
+            if (state.onlineSubMode === 'duel') bindOnlineConnection(conn);
+            else bindGuestTourneyConnection(conn);
+          });
+          state.peer.on('error', () => {});
+        }
       });
 
       document.getElementById('btnBackToHome').addEventListener('click', () => {
