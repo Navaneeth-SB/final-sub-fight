@@ -161,21 +161,21 @@
         height: clamp(32px, 11dvh, 52px) !important;
       }
       .arena-top-hud {
-        padding: 3px 8px !important;
+        padding: 24px 8px 2px 8px !important;
       }
       .arena-hp-bar {
         height: 14px !important;
       }
       .arena-timer-box {
-        width: 36px !important;
-        height: 34px !important;
+        width: 42px !important;
+        height: 38px !important;
       }
       .touch-btn {
-        width: clamp(34px, 10dvh, 44px) !important;
+        width: clamp(44px, 11.5dvh, 52px) !important;
         height: clamp(30px, 8.5dvh, 38px) !important;
-      }
-      #arenaTourneyNameBar {
-        top: 52px !important;
+        font-size: 8px !important;
+        letter-spacing: -0.02em !important;
+        overflow: hidden !important;
       }
       #specialDialogueBanner {
         bottom: 8px !important;
@@ -578,15 +578,15 @@
     </div>
 
     <!-- ================================================================= -->
-    <!-- PERSISTENT TOURNAMENT ONLINE PLAYERS NAME BAR (TOP STRIP)         -->
+    <!-- PERSISTENT TOURNAMENT ONLINE PLAYERS NAME BAR (BOTTOM-CENTER)     -->
     <!-- ================================================================= -->
-    <div id="arenaTourneyNameBar" class="hidden absolute top-[62px] sm:top-[82px] left-2 right-2 z-20 pointer-events-auto">
-      <div class="max-w-5xl mx-auto bg-slate-950/90 backdrop-blur-md border border-amber-500/40 rounded-xl px-2.5 py-1 flex items-center gap-2 overflow-x-auto shadow-lg">
-        <div class="flex items-center gap-1 shrink-0 border-r border-slate-800 pr-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="arenaTourneyCount" class="font-arcade font-black text-[9px] sm:text-[10px] text-emerald-400">ONLINE: 1/10</span>
+    <div id="arenaTourneyNameBar" class="hidden absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto max-w-[44vw] sm:max-w-[54vw] opacity-80 hover:opacity-100 transition-opacity">
+      <div class="bg-slate-950/55 backdrop-blur-sm border border-amber-500/25 rounded-full px-2.5 py-0.5 flex items-center gap-1.5 overflow-x-auto shadow-md">
+        <div class="flex items-center gap-1 shrink-0 border-r border-slate-700/70 pr-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="arenaTourneyCount" class="font-arcade font-bold text-[8px] sm:text-[9px] text-emerald-300/95">ONLINE: 1/10</span>
         </div>
-        <div id="arenaTourneyPills" class="flex items-center gap-1.5 overflow-x-auto py-0.5"></div>
+        <div id="arenaTourneyPills" class="flex items-center gap-1 overflow-x-auto py-0.5"></div>
       </div>
     </div>
 
@@ -4663,16 +4663,17 @@
         const cls = statusColors[p.status] || statusColors.lobby;
         const lbl = statusLabels[p.status] || 'ONLINE';
         return `
-          <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg border ${cls} shrink-0 text-[9px] font-arcade">
-            <img src="${f.faceImg}" class="w-4 h-4 rounded-full object-cover" />
+          <div class="flex items-center gap-1 px-1.5 py-0.2 rounded-full border ${cls} shrink-0 text-[8px] font-arcade leading-tight">
+            <img src="${f.faceImg}" class="w-3.5 h-3.5 rounded-full object-cover" />
             <span class="font-bold">${p.nickname}</span>
-            <span class="opacity-85 text-[8px]">${lbl}</span>
+            <span class="opacity-80 text-[7px]">${lbl}</span>
           </div>
         `;
       }).join('');
 
       const me = players.find(p => p.id === state.tourney.myId);
       if (state.tourney.myMatchRole === 'spectator') {
+        topBar.style.bottom = '84px';
         specDock.classList.remove('hidden');
         document.getElementById('arenaFightpadContainer')?.classList.add('hidden');
 
@@ -4716,6 +4717,7 @@
           `).join('');
         }
       } else {
+        topBar.style.bottom = '8px';
         specDock.classList.add('hidden');
         document.getElementById('arenaFightpadContainer')?.classList.remove('hidden');
       }
