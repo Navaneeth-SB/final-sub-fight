@@ -171,11 +171,22 @@
         height: 38px !important;
       }
       .touch-btn {
-        width: clamp(44px, 11.5dvh, 52px) !important;
-        height: clamp(30px, 8.5dvh, 38px) !important;
-        font-size: 8px !important;
-        letter-spacing: -0.02em !important;
-        overflow: hidden !important;
+        min-width: clamp(50px, 13dvh, 64px) !important;
+        height: clamp(34px, 9.5dvh, 44px) !important;
+        font-size: 9px !important;
+        padding: 4px 8px !important;
+      }
+      .special-touch-btn {
+        min-width: clamp(56px, 14dvh, 72px) !important;
+        height: clamp(76px, 20dvh, 96px) !important;
+      }
+      #joystickBase {
+        width: clamp(92px, 23dvh, 118px) !important;
+        height: clamp(92px, 23dvh, 118px) !important;
+      }
+      #joystickKnob {
+        width: clamp(40px, 10dvh, 50px) !important;
+        height: clamp(40px, 10dvh, 50px) !important;
       }
       #specialDialogueBanner {
         bottom: 8px !important;
@@ -679,37 +690,47 @@
       </div>
     </div>
 
-    <!-- Bottom Touch / Arcade Fightpad Controls -->
-    <div id="arenaFightpadContainer" class="absolute bottom-2 left-2 right-2 z-20 flex items-end justify-between pointer-events-none">
-      <!-- Left D-Pad -->
-      <div class="flex items-center gap-1.5 pointer-events-auto bg-slate-950/75 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-800">
-        <button data-p1-act="left" class="touch-btn arcade-btn w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-800/90 active:bg-sky-500 active:text-black text-white font-arcade font-bold text-base border border-slate-600 flex items-center justify-center">◀</button>
-        <div class="flex flex-col gap-1.5">
-          <button data-p1-act="jump" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-sky-900/90 active:bg-sky-400 active:text-black text-sky-200 font-arcade font-bold text-sm border border-sky-400/60 flex items-center justify-center">▲</button>
-          <button data-p1-act="crouch" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-slate-800/90 active:bg-sky-500 active:text-black text-white font-arcade font-bold text-sm border border-slate-600 flex items-center justify-center">▼</button>
+    <!-- Bottom Touch / Ergonomic Arcade Thumbstick & 5-Button Attack Deck (Inset Comfortably from Screen Edges!) -->
+    <div id="arenaFightpadContainer" class="absolute z-20 flex items-end justify-between pointer-events-none" style="bottom: clamp(18px, 6dvh, 36px); left: max(28px, 5.5vw); right: max(28px, 5.5vw);">
+
+      <!-- Left Analog / 8-Way Virtual Arcade Thumbstick -->
+      <div id="virtualJoystickZone" class="pointer-events-auto p-2 flex items-center justify-center">
+        <div id="joystickBase" class="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-slate-950/75 backdrop-blur-md border-2 border-sky-400/50 shadow-[0_0_25px_rgba(14,165,233,0.25),inset_0_0_18px_rgba(14,165,233,0.2)] flex items-center justify-center">
+          <!-- Directional Axis Hints -->
+          <span class="absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-arcade font-bold text-sky-300/75 pointer-events-none">▲ JMP</span>
+          <span class="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] font-arcade font-bold text-amber-300/75 pointer-events-none">▼ BLK</span>
+          <span class="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-arcade font-bold text-slate-400/80 pointer-events-none">◀</span>
+          <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-arcade font-bold text-slate-400/80 pointer-events-none">▶</span>
+          <!-- Inner Center Ring -->
+          <div class="w-12 h-12 rounded-full border border-slate-700/70 pointer-events-none"></div>
+          <!-- Movable Thumbstick Ball-Top Knob -->
+          <div id="joystickKnob" class="absolute w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-900 border-2 border-sky-200 shadow-[0_4px_14px_rgba(0,0,0,0.8),0_0_14px_rgba(56,189,248,0.6)] flex items-center justify-center pointer-events-none transition-transform duration-75 ease-out">
+            <div class="w-4 h-4 rounded-full bg-white/30 blur-[1px] -translate-x-1 -translate-y-1"></div>
+          </div>
         </div>
-        <button data-p1-act="right" class="touch-btn arcade-btn w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-800/90 active:bg-sky-500 active:text-black text-white font-arcade font-bold text-base border border-slate-600 flex items-center justify-center">▶</button>
       </div>
 
-      <!-- Right Action Pad (Punch, Heavy, Grab, Kick, Sweep, SPECIAL MOVE) -->
-      <div class="grid grid-cols-3 gap-1.5 pointer-events-auto bg-slate-950/75 backdrop-blur-sm p-1.5 rounded-2xl border border-slate-800">
-        <button data-p1-act="lp" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-blue-950/90 active:bg-blue-500 text-blue-200 font-arcade font-bold text-[10px] sm:text-xs border border-blue-500/60 flex flex-col items-center justify-center">
-          <span>JAB</span><span class="text-[8px] opacity-70">[F]</span>
-        </button>
-        <button data-p1-act="rp" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-indigo-950/90 active:bg-indigo-500 text-indigo-200 font-arcade font-bold text-[10px] sm:text-xs border border-indigo-500/60 flex flex-col items-center justify-center">
-          <span>HEAVY</span><span class="text-[8px] opacity-70">[G]</span>
-        </button>
-        <button data-p1-act="grab" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-purple-950/90 active:bg-purple-500 text-purple-200 font-arcade font-bold text-[10px] sm:text-xs border border-purple-500/60 flex flex-col items-center justify-center">
-          <span>GRAB</span><span class="text-[8px] opacity-70">[T]</span>
-        </button>
-        <button data-p1-act="lk" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-emerald-950/90 active:bg-emerald-500 text-emerald-200 font-arcade font-bold text-[10px] sm:text-xs border border-emerald-500/60 flex flex-col items-center justify-center">
-          <span>KICK</span><span class="text-[8px] opacity-70">[H]</span>
-        </button>
-        <button data-p1-act="rk" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-amber-950/90 active:bg-amber-500 text-amber-200 font-arcade font-bold text-[10px] sm:text-xs border border-amber-500/60 flex flex-col items-center justify-center">
-          <span>SWEEP</span><span class="text-[8px] opacity-70">[J]</span>
-        </button>
-        <button data-p1-act="super" class="touch-btn arcade-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 text-white font-arcade font-bold text-[9px] sm:text-[10px] border border-amber-300 flex flex-col items-center justify-center">
-          <span>SPECIAL</span><span class="text-[8px] opacity-90">[R]</span>
+      <!-- Right Action Pad: 2x2 Strike Grid (JAB, HEAVY, KICK, SWEEP) + Prominent Tall SPECIAL Button with Optimal Padding -->
+      <div class="flex items-center gap-2.5 sm:gap-3 pointer-events-auto bg-slate-950/75 backdrop-blur-md p-2.5 sm:p-3.5 rounded-3xl border border-slate-700/80 shadow-2xl">
+        <!-- 2x2 Core Strikes Grid -->
+        <div class="grid grid-cols-2 gap-2.5 sm:gap-3">
+          <button data-p1-act="lp" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-blue-950/90 active:bg-blue-500 text-blue-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-blue-400/60 shadow-md flex flex-col items-center justify-center">
+            <span>JAB</span><span class="text-[8px] opacity-75">[F]</span>
+          </button>
+          <button data-p1-act="rp" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-indigo-950/90 active:bg-indigo-500 text-indigo-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-indigo-400/60 shadow-md flex flex-col items-center justify-center">
+            <span>HEAVY</span><span class="text-[8px] opacity-75">[G]</span>
+          </button>
+          <button data-p1-act="lk" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-emerald-950/90 active:bg-emerald-500 text-emerald-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-emerald-400/60 shadow-md flex flex-col items-center justify-center">
+            <span>KICK</span><span class="text-[8px] opacity-75">[H]</span>
+          </button>
+          <button data-p1-act="rk" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-amber-950/90 active:bg-amber-500 text-amber-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-amber-400/60 shadow-md flex flex-col items-center justify-center">
+            <span>SWEEP</span><span class="text-[8px] opacity-75">[J]</span>
+          </button>
+        </div>
+
+        <!-- Dedicated Prominent SPECIAL Finisher Button -->
+        <button data-p1-act="super" class="special-touch-btn arcade-btn w-16 h-24 sm:w-20 sm:h-28 px-2.5 py-2 rounded-2xl bg-gradient-to-br from-red-600 via-orange-600 to-amber-500 text-white font-arcade font-black text-[10px] sm:text-xs border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.45)] flex flex-col items-center justify-center gap-1">
+          <span>SPECIAL</span><span class="text-[8px] sm:text-[9px] bg-black/35 px-1.5 py-0.5 rounded opacity-95">[R]</span>
         </button>
       </div>
     </div>
@@ -4922,6 +4943,128 @@
         return (state.mode === 'online' && state.onlineRole === 'guest') ? 'p2' : 'p1';
       };
 
+      // =====================================================================
+      // 8-WAY VIRTUAL ARCADE THUMBSTICK CONTROLLER (MULTI-TOUCH & DIAGONAL JUMP)
+      // =====================================================================
+      const joyZone = document.getElementById('virtualJoystickZone');
+      const joyBase = document.getElementById('joystickBase');
+      const joyKnob = document.getElementById('joystickKnob');
+      let joyTouchId = null;
+      let joyMouseDown = false;
+      let joyJumpTriggered = false;
+
+      function updateJoystickPosition(clientX, clientY) {
+        if (!joyBase || !joyKnob) return;
+        const rect = joyBase.getBoundingClientRect();
+        const cx = rect.left + rect.width * 0.5;
+        const cy = rect.top + rect.height * 0.5;
+        const maxRadius = rect.width * 0.38;
+
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist > maxRadius && dist > 0) {
+          dx = (dx / dist) * maxRadius;
+          dy = (dy / dist) * maxRadius;
+        }
+
+        joyKnob.style.transition = 'none';
+        joyKnob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+
+        const normX = dx / maxRadius;
+        const normY = dy / maxRadius;
+        const who = getTouchWho();
+        const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+
+        // Horizontal Movement (Left / Right)
+        keyBag.left = normX < -0.26;
+        keyBag.right = normX > 0.26;
+        if (keyBag.left) performFighterAction(who, 'left');
+        else if (keyBag.right) performFighterAction(who, 'right');
+
+        // Downward Pull -> Crouch / Guard Block
+        keyBag.down = normY > 0.36;
+        if (keyBag.down) performFighterAction(who, 'crouch');
+
+        // Upward Pull -> Jump (Supports Diagonal Jump-Forward & Jump-Back!)
+        if (normY < -0.40) {
+          if (!joyJumpTriggered) {
+            joyJumpTriggered = true;
+            performFighterAction(who, 'jump');
+            const actor = who === 'p1' ? state.p1 : state.p2;
+            if (keyBag.left) actor.vx = -7.2;
+            else if (keyBag.right) actor.vx = 7.2;
+          }
+        } else if (normY > -0.20) {
+          joyJumpTriggered = false;
+        }
+      }
+
+      function resetJoystick() {
+        joyTouchId = null;
+        joyMouseDown = false;
+        joyJumpTriggered = false;
+        if (joyKnob) {
+          joyKnob.style.transition = 'transform 0.12s cubic-bezier(0.16, 1, 0.3, 1)';
+          joyKnob.style.transform = 'translate(0px, 0px)';
+        }
+        const who = getTouchWho();
+        const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+        keyBag.left = false;
+        keyBag.right = false;
+        keyBag.down = false;
+      }
+
+      if (joyZone) {
+        joyZone.addEventListener('touchstart', e => {
+          if (e.cancelable) e.preventDefault();
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            joyTouchId = t.identifier;
+            updateJoystickPosition(t.clientX, t.clientY);
+            break;
+          }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', e => {
+          if (joyTouchId === null) return;
+          for (let i = 0; i < e.touches.length; i++) {
+            const t = e.touches[i];
+            if (t.identifier === joyTouchId) {
+              if (e.cancelable) e.preventDefault();
+              updateJoystickPosition(t.clientX, t.clientY);
+              break;
+            }
+          }
+        }, { passive: false });
+
+        const endJoyTouch = e => {
+          if (joyTouchId === null) return;
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joyTouchId) {
+              resetJoystick();
+              break;
+            }
+          }
+        };
+        window.addEventListener('touchend', endJoyTouch, { passive: false });
+        window.addEventListener('touchcancel', endJoyTouch, { passive: false });
+
+        // Mouse drag support for testing thumbstick on PC
+        joyZone.addEventListener('mousedown', e => {
+          e.preventDefault();
+          joyMouseDown = true;
+          updateJoystickPosition(e.clientX, e.clientY);
+        });
+        window.addEventListener('mousemove', e => {
+          if (!joyMouseDown) return;
+          updateJoystickPosition(e.clientX, e.clientY);
+        });
+        window.addEventListener('mouseup', () => {
+          if (joyMouseDown) resetJoystick();
+        });
+      }
+
       function syncTouchButtons(e) {
         if (e.cancelable) e.preventDefault();
         const who = getTouchWho();
@@ -4930,14 +5073,14 @@
 
         for (let i = 0; i < e.touches.length; i++) {
           const t = e.touches[i];
-          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('.touch-btn');
+          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-p1-act]');
           if (el) {
             const a = el.getAttribute('data-p1-act');
             if (a) activeActs.add(a);
           }
         }
 
-        document.querySelectorAll('.touch-btn').forEach(b => {
+        document.querySelectorAll('[data-p1-act]').forEach(b => {
           const a = b.getAttribute('data-p1-act');
           const wasPressed = b.classList.contains('pressed');
           const isNowPressed = activeActs.has(a);
@@ -4946,13 +5089,9 @@
             performFighterAction(who, a);
           }
         });
-
-        keyBag.left = activeActs.has('left');
-        keyBag.right = activeActs.has('right');
-        keyBag.down = activeActs.has('crouch');
       }
 
-      document.querySelectorAll('.touch-btn').forEach(btn => {
+      document.querySelectorAll('[data-p1-act]').forEach(btn => {
         const act = btn.getAttribute('data-p1-act');
 
         btn.addEventListener('touchstart', syncTouchButtons, { passive: false });
