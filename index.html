@@ -382,6 +382,15 @@
               JOIN
             </button>
           </div>
+
+          <!-- Optional Dedicated Node.js WebSocket Server Bar (Auto-connects if hosted on Node.js, or works Serverless on GitHub Pages) -->
+          <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg px-2 py-1">
+            <span id="wsServerDot" class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Network Mode"></span>
+            <input id="inputWsServerUrl" type="text" placeholder="NODE.JS WS:// URL (OPTIONAL)" class="w-full bg-transparent text-[9px] font-hud text-slate-200 focus:outline-none" />
+            <button id="btnConnectWsServer" type="button" class="px-2 py-0.5 rounded bg-indigo-500/30 hover:bg-indigo-500/50 border border-indigo-400/50 text-indigo-200 font-arcade text-[8px] shrink-0">
+              LINK WS
+            </button>
+          </div>
         </div>
 
         <!-- Right 8 Cols: Live Online Players Name Bar + Add Bot + Ready + Start Tournament -->
@@ -1478,21 +1487,21 @@
     const sfx = new ArcadeSoundAndVoice();
 
     // =========================================================================
-    // 3. GAME STATE & SPECIAL MOVE CINEMATIC CONTROLLER
+    // 3. GAME STATE & DETERMINISTIC EVENT-DRIVEN LOCKSTEP COMBAT ENGINE
     // =========================================================================
     const ARENA_MIN_X = 80;
     const ARENA_MAX_X = 920;
     const BODY_COLLISION_DIST = 72;
     const JUMP_OVER_HEIGHT = 80;
 
-    // Classic Arcade Frame Data & Hit Properties (Balanced for competitive 1v1 & Tournament play)
+    // Classic Arcade Frame Data & Hit Properties
     const ATTACK_SPECS = {
-      lp:    { dmg: 4.5, range: 116, duration: 15, activeStart: 4, activeEnd: 10, meterGain: 10, pushX: 9,  launchY: 0,    heavy: false, hitLevel: 'high', label: 'JAB' },
-      rp:    { dmg: 7.5, range: 126, duration: 22, activeStart: 6, activeEnd: 14, meterGain: 14, pushX: 15, launchY: 9.5,  heavy: true,  hitLevel: 'mid',  label: 'UPPERCUT' },
-      lk:    { dmg: 6.0, range: 136, duration: 18, activeStart: 5, activeEnd: 13, meterGain: 12, pushX: 12, launchY: 2.5,  heavy: false, hitLevel: 'high', label: 'HIGH KICK' },
-      rk:    { dmg: 8.0, range: 144, duration: 24, activeStart: 7, activeEnd: 16, meterGain: 15, pushX: 18, launchY: 6.5,  heavy: true,  hitLevel: 'low',  label: 'SWEEP' },
-      grab:  { dmg: 9.5, range: 96,  duration: 24, activeStart: 5, activeEnd: 13, meterGain: 16, pushX: 22, launchY: 11.0, heavy: true,  unblockable: true, hitLevel: 'throw', label: 'THROW' },
-      super: { dmg: 38.0, range: 215, duration: 28, activeStart: 5, activeEnd: 20, meterGain: -100, pushX: 26, launchY: 12.0, heavy: true, hitLevel: 'special', label: 'SPECIAL MOVE' }
+      lp:    { dmg: 4.5, range: 116, duration: 15, activeStart: 4, activeEnd: 10, meterGain: 10, pushX: 9,  launchY: 0,    heavy: false, label: 'JAB' },
+      rp:    { dmg: 7.5, range: 126, duration: 22, activeStart: 6, activeEnd: 14, meterGain: 14, pushX: 15, launchY: 9.5,  heavy: true,  label: 'UPPERCUT' },
+      lk:    { dmg: 6.0, range: 136, duration: 18, activeStart: 5, activeEnd: 13, meterGain: 12, pushX: 12, launchY: 2.5,  heavy: false, label: 'HIGH KICK' },
+      rk:    { dmg: 8.0, range: 144, duration: 24, activeStart: 7, activeEnd: 16, meterGain: 15, pushX: 18, launchY: 6.5,  heavy: true,  label: 'SWEEP' },
+      grab:  { dmg: 9.5, range: 96,  duration: 24, activeStart: 5, activeEnd: 13, meterGain: 16, pushX: 22, launchY: 11.0, heavy: true,  unblockable: true, label: 'THROW' },
+      super: { dmg: 38.0, range: 215, duration: 28, activeStart: 5, activeEnd: 20, meterGain: -100, pushX: 26, launchY: 12.0, heavy: true, label: 'SPECIAL MOVE' }
     };
 
     function createFighterState(x, dir) {
@@ -1508,6 +1517,8 @@
         vx: 0,
         vy: 0,
         dir,
+        moveDir: 0,       // -1 (walking left), 0 (neutral), +1 (walking right)
+        crouching: false, // true when holding crouch
         action: 'idle',
         actionTimer: 0,
         actionMax: 1,
@@ -1541,6 +1552,9 @@
       onlineRole: null,
       peer: null,
       conn: null,
+      wsClient: null,
+      wsConnected: false,
+      wsServerUrl: '',
       roomCode: '',
       onlineSubMode: 'tournament', // 'tournament' | 'duel'
       matchSessionToken: 1,
@@ -1554,8 +1568,8 @@
         phase: 'lobby', // 'lobby' | 'active' | 'champion'
         roundNum: 1,
         roundTimeLeft: 120,
-        players: [], // { id, nickname, fighterIdx, ready, isBot, status, wins, grudgeWins, byeCount, matchesPlayed, lastSeen }
-        matches: [], // { id, matchOrderNum, roundNum, bracket: 'main'|'loser'|'bye', p1Id, p2Id, p1Nick, p2Nick, p1Fighter, p2Fighter, status: 'queued'|'fighting'|'finished'|'bye', winnerId, loserId, p1Wins, p2Wins, startedAt }
+        players: [],
+        matches: [],
         championId: null,
         championNick: '',
         championFighterIdx: 0,
@@ -1563,10 +1577,9 @@
         myMatchRole: null, // 'p1' | 'p2' | 'spectator'
         opponentIsBot: false,
         bothAreBots: false,
-        hostConns: {}, // map of playerId -> PeerJS DataConnection (on Host)
-        pendingChallengeFrom: null, // { fromId, fromNick }
-        lastSyncSent: 0,
-        lastInputSent: 0
+        hostConns: {},
+        pendingChallengeFrom: null,
+        lastSyncSent: 0
       },
       selectSlot: 'p1',
       p1Index: 0,
@@ -1581,7 +1594,6 @@
       roundSettled: false,
       hitStop: 0,
       shake: 0,
-      // Unskippable Slow-Motion Special Move Cutscene State
       cinematic: null,
       p1Keys: { left: false, right: false, down: false },
       p2Keys: { left: false, right: false, down: false },
@@ -1593,7 +1605,7 @@
       shards: []
     };
 
-    // Session-guarded timer helper so old round/match timeouts can NEVER leak into a new round or match!
+    // Session-guarded timer so old round/match timeouts never fire in a later round or match
     function scheduleMatchTimer(callback, delayMs) {
       const token = state.matchSessionToken;
       const matchIdSnapshot = state.tourney.currentMatchId;
@@ -1604,16 +1616,28 @@
       }, delayMs);
     }
 
-    // Returns true if this client is the authoritative simulation arbiter for the current match
+    // Returns which fighter slot ('p1', 'p2', 'both', or null) THIS browser locally controls
+    function getLocalControlledSlot() {
+      if (state.mode === 'cpu') return 'p1';
+      if (state.mode === '2p') return 'both';
+      if (state.mode === 'online') return state.onlineRole === 'guest' ? 'p2' : 'p1';
+      if (state.mode === 'tournament' && state.tourney.active) {
+        if (state.tourney.myMatchRole === 'p1') return 'p1';
+        if (state.tourney.myMatchRole === 'p2') return 'p2';
+        return null; // Spectators do NOT locally control p1 or p2!
+      }
+      return 'p1';
+    }
+
+    // Returns true if this client is the authoritative combat arbiter for hit detection & round timer
     function isLocalMatchArbiter() {
       if (state.mode === 'cpu' || state.mode === '2p') return true;
       if (state.mode === 'online') return state.onlineRole !== 'guest';
       if (state.mode === 'tournament' && state.tourney.active) {
         if (state.tourney.myMatchRole === 'p1') return true;
-        // If the active match has an AI Bot in slot P1 (or Bot vs Bot), the Room Host arbitrates it
         if (state.onlineRole === 'host') {
           const activeM = state.tourney.matches.find(m => m.id === state.tourney.currentMatchId);
-          if (activeM && (activeM.p1IsBot || (activeM.p1IsBot && activeM.p2IsBot))) return true;
+          if (activeM && activeM.p1IsBot) return true;
         }
         return false;
       }
@@ -1839,9 +1863,6 @@
           sfx.announce('Round Start! Fight!', 'announcer');
           state.roundLive = true;
           state.lastTimerTick = performance.now();
-          if (isLocalMatchArbiter() && (state.mode === 'tournament' || state.mode === 'online')) {
-            broadcastMyTourneyMatchSnapshot(true);
-          }
           scheduleMatchTimer(() => hideArenaCallout(), 700);
         }, 2100);
       } else {
@@ -1851,9 +1872,6 @@
           showArenaCallout('FIGHT!', `${p1Display} VS ${p2Display}`);
           state.roundLive = true;
           state.lastTimerTick = performance.now();
-          if (isLocalMatchArbiter() && (state.mode === 'tournament' || state.mode === 'online')) {
-            broadcastMyTourneyMatchSnapshot(true);
-          }
           scheduleMatchTimer(() => hideArenaCallout(), 700);
         }, 1050);
       }
@@ -1866,6 +1884,10 @@
       state.roundSettled = true;
       state.roundLive = false;
       state.cinematic = null;
+      state.p1.moveDir = 0;
+      state.p2.moveDir = 0;
+      state.p1.crouching = false;
+      state.p2.crouching = false;
       document.getElementById('specialDialogueBanner').classList.add('hidden');
 
       triggerArenaFlash('#ef4444');
@@ -1893,9 +1915,18 @@
 
       updateArenaHUD();
 
-      // Immediately broadcast authoritative round-end snapshot so P2 and spectators are 100% locked in sync
+      // Authoritative Round-End Broadcast
       if (!fromRemoteSync && isLocalMatchArbiter() && (state.mode === 'tournament' || state.mode === 'online')) {
-        broadcastMyTourneyMatchSnapshot(true, { roundEndedWinner: winnerWho, roundEndedReason: reason });
+        broadcastMatchEvent({
+          type: 'round_event',
+          matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+          event: 'round_end',
+          winnerWho,
+          reason,
+          p1Wins: state.p1Wins,
+          p2Wins: state.p2Wins,
+          roundNumber: state.roundNumber
+        });
       }
 
       const isMatchOver = (state.p1Wins >= 2 || state.p2Wins >= 2);
@@ -1928,10 +1959,9 @@
           document.getElementById('victoryScoreLine').textContent = `KHATAM! ${winTag} wins (${state.p1Wins} - ${state.p2Wins} Rounds)`;
           document.getElementById('modalMatchVictory').classList.remove('hidden');
         } else {
-          if (isLocalMatchArbiter()) {
-            state.roundNumber += 1;
-            startRound();
-          }
+          // Both Arbiter and Remote clients advance cleanly to the next round together
+          state.roundNumber += 1;
+          startRound();
         }
       }, 2200);
     }
@@ -1982,9 +2012,8 @@
 
       const spBtn = document.querySelector('[data-p1-act="super"]');
       if (spBtn) {
-        const isControlledP2 = (state.mode === 'online' && state.onlineRole === 'guest') ||
-          (state.mode === 'tournament' && state.tourney.myMatchRole === 'p2');
-        const activePlayer = isControlledP2 ? state.p2 : state.p1;
+        const mySlot = getLocalControlledSlot();
+        const activePlayer = mySlot === 'p2' ? state.p2 : state.p1;
         const isReady = activePlayer.meter >= 100 && !activePlayer.specialUsedThisRound;
         spBtn.style.opacity = isReady ? '1' : '0.45';
         const subLabel = spBtn.querySelectorAll('span')[1];
@@ -2013,9 +2042,13 @@
 
       attacker.meter = 0;
       attacker.specialUsedThisRound = true;
+      attacker.moveDir = 0;
+      attacker.crouching = false;
       attacker.vx = 0;
       attacker.vy = 0;
       attacker.y = 0;
+      defender.moveDir = 0;
+      defender.crouching = false;
       defender.vx = 0;
       defender.vy = 0;
       defender.y = 0;
@@ -2090,8 +2123,7 @@
       const d = cin.dir;
       const willBeFatal = (cin.defenderStartHp <= ATTACK_SPECS.super.dmg);
 
-      // Smoothly drain up to 28 HP during the cinematic (and final 10 HP at completion = 38 HP total)
-      if (isLocalMatchArbiter() && p > 0.25 && p < 0.90) {
+      if (p > 0.25 && p < 0.90) {
         defender.hp = Math.max(0, +(defender.hp - 0.20).toFixed(2));
         updateArenaHUD();
       }
@@ -2308,10 +2340,8 @@
       if (cin.frame >= cin.maxFrames) {
         document.getElementById('specialDialogueBanner').classList.add('hidden');
         attacker.y = 0;
-        if (isLocalMatchArbiter()) {
-          const targetEndHp = Math.max(0, +(cin.defenderStartHp - ATTACK_SPECS.super.dmg).toFixed(1));
-          defender.hp = targetEndHp;
-        }
+        const targetEndHp = Math.max(0, +(cin.defenderStartHp - ATTACK_SPECS.super.dmg).toFixed(1));
+        defender.hp = targetEndHp;
         updateArenaHUD();
         state.cinematic = null;
 
@@ -2341,11 +2371,36 @@
     }
 
     // =========================================================================
-    // 7. CLASSIC ARCADE FIGHTER INPUT, MOVEMENT & HITBOX ENGINE
+    // 7. DETERMINISTIC MOVEMENT & COMBAT HIT ENGINE (EVENT-DRIVEN LOCKSTEP)
     // =========================================================================
-    // Handles continuous held directional inputs (Left / Right / Down-Crouch / Standing Block)
-    // WITHOUT canceling active attacks or spamming network packets every 16ms frame!
-    function applyFighterContinuousInput(who, keys) {
+    // Translates local held keys (`p1Keys` or `p2Keys`) into `fighter.moveDir` (-1, 0, 1) and `fighter.crouching`
+    // ONLY for the locally controlled fighter, emitting a network packet ONLY when `moveDir` or `crouching` changes!
+    function syncLocalKeysToFighterIntent(who, keys) {
+      const actor = who === 'p1' ? state.p1 : state.p2;
+      const newMoveDir = (keys.left && !keys.right) ? -1 : ((keys.right && !keys.left) ? 1 : 0);
+      const newCrouch = !!keys.down;
+
+      if (actor.moveDir !== newMoveDir || actor.crouching !== newCrouch) {
+        actor.moveDir = newMoveDir;
+        actor.crouching = newCrouch;
+
+        if (state.mode === 'online' || (state.mode === 'tournament' && state.tourney.active && state.tourney.myMatchRole !== 'spectator')) {
+          broadcastMatchEvent({
+            type: 'cmd',
+            matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+            who,
+            act: 'move',
+            moveDir: newMoveDir,
+            crouching: newCrouch,
+            x: Math.round(actor.x),
+            y: Math.round(actor.y)
+          });
+        }
+      }
+    }
+
+    // Steps a fighter's continuous movement & guard state on ALL clients using `actor.moveDir` and `actor.crouching`
+    function stepFighterMovementIntent(who) {
       if (!state.roundLive || state.paused || state.cinematic) return;
       const actor = who === 'p1' ? state.p1 : state.p2;
       const target = who === 'p1' ? state.p2 : state.p1;
@@ -2355,12 +2410,10 @@
         return;
       }
 
-      // Always face the opponent when grounded in neutral/movement states (Classic Street Fighter / Tekken rule)
       const naturalDir = (actor.x <= target.x) ? 1 : -1;
-      const isAttacking = !!ATTACK_SPECS[actor.action];
 
-      // Do NOT override active attack animations, directions, or guard states mid-attack!
-      if (isAttacking) {
+      // Never overwrite an active attack's animation or facing direction
+      if (ATTACK_SPECS[actor.action]) {
         actor.blocking = false;
         return;
       }
@@ -2369,29 +2422,17 @@
         actor.dir = naturalDir;
       }
 
-      const holdingBack = (naturalDir === 1 && keys.left && !keys.right) || (naturalDir === -1 && keys.right && !keys.left);
-      const holdingForward = (naturalDir === 1 && keys.right && !keys.left) || (naturalDir === -1 && keys.left && !keys.right);
-
-      // Priority 1: Crouch / Crouch-Guard (holding Down or Down-Back while grounded)
-      if (keys.down && actor.y <= 1) {
+      if (actor.crouching && actor.y <= 1) {
         actor.action = 'crouch';
         actor.actionTimer = 4;
         actor.vx *= 0.35;
-        // Holding Down blocks high/low strikes in casual arcade style
         actor.blocking = true;
         return;
       }
 
-      // Priority 2: Left / Right Walk & Standing Back-Guard
-      if (keys.left && !keys.right) {
-        actor.vx = holdingBack ? -5.6 : -6.8;
-        if (actor.y <= 1) {
-          actor.action = 'walk';
-          actor.actionTimer = 6;
-        }
-        actor.blocking = holdingBack && actor.y <= 1;
-      } else if (keys.right && !keys.left) {
-        actor.vx = holdingBack ? 5.6 : 6.8;
+      if (actor.moveDir !== 0) {
+        const holdingBack = (naturalDir === 1 && actor.moveDir === -1) || (naturalDir === -1 && actor.moveDir === 1);
+        actor.vx = actor.moveDir * (holdingBack ? 5.6 : 6.8);
         if (actor.y <= 1) {
           actor.action = 'walk';
           actor.actionTimer = 6;
@@ -2406,91 +2447,54 @@
       }
     }
 
-    function performFighterAction(who, act) {
+    function performFighterAction(who, act, fromNetwork = false) {
       if (!state.roundLive || state.paused || state.cinematic) return;
       const actor = who === 'p1' ? state.p1 : state.p2;
       const target = who === 'p1' ? state.p2 : state.p1;
 
       if (actor.action === 'ko' || actor.action === 'hit' || actor.action === 'win') return;
 
-      // Forward discrete actions from P2 to the Match Arbiter in Tournament or Online Duel mode
-      if (!actor._remoteTriggered) {
-        if (state.mode === 'tournament' && state.tourney.active) {
-          if (state.tourney.myMatchRole === 'spectator') return;
-          if (state.tourney.myMatchRole === 'p2' && who === 'p2') {
-            if (act === 'left' || act === 'right' || act === 'crouch') {
-              sendP2InputStateNow();
-            } else {
-              sendTourneyPacketToHost({
-                type: 'tourney_p2_act',
-                matchId: state.tourney.currentMatchId,
-                act,
-                x: Math.round(actor.x),
-                y: Math.round(actor.y)
-              });
-            }
-          }
-        } else if (state.mode === 'online') {
-          if (state.onlineRole === 'guest' && who === 'p2') {
-            if (act === 'left' || act === 'right' || act === 'crouch') {
-              sendP2InputStateNow();
-            } else {
-              sendOnlinePacket({ type: 'act', who: 'p2', act, x: Math.round(actor.x), y: Math.round(actor.y) });
-            }
-          } else if (state.onlineRole === 'host' && who === 'p1' && !['left', 'right', 'crouch'].includes(act)) {
-            sendOnlinePacket({ type: 'act', who: 'p1', act, x: Math.round(actor.x), y: Math.round(actor.y) });
-          }
-        }
-      }
-
       const naturalDir = (actor.x <= target.x) ? 1 : -1;
 
       if (act === 'left') {
-        if (ATTACK_SPECS[actor.action]) return;
-        actor.dir = naturalDir;
-        const holdingBack = (naturalDir === 1);
-        actor.vx = holdingBack ? -5.6 : -6.8;
-        if (actor.y === 0) {
-          actor.action = 'walk';
-          actor.actionTimer = 6;
-        }
-        actor.blocking = holdingBack && actor.y === 0;
+        actor.moveDir = -1;
+        stepFighterMovementIntent(who);
         return;
       }
       if (act === 'right') {
-        if (ATTACK_SPECS[actor.action]) return;
-        actor.dir = naturalDir;
-        const holdingBack = (naturalDir === -1);
-        actor.vx = holdingBack ? 5.6 : 6.8;
-        if (actor.y === 0) {
-          actor.action = 'walk';
-          actor.actionTimer = 6;
-        }
-        actor.blocking = holdingBack && actor.y === 0;
+        actor.moveDir = 1;
+        stepFighterMovementIntent(who);
         return;
       }
+      if (act === 'crouch') {
+        actor.crouching = true;
+        stepFighterMovementIntent(who);
+        return;
+      }
+
       if (act === 'jump') {
         if (ATTACK_SPECS[actor.action]) return;
         if (actor.y <= 1) {
           actor.dir = naturalDir;
           actor.vy = 16.5;
           actor.y = 2;
+          if (actor.moveDir !== 0) actor.vx = actor.moveDir * 7.0;
           actor.action = 'jump';
           actor.actionTimer = 30;
           actor.blocking = false;
           sfx.jump();
           spawnDustParticles(actor.x, 0, '#fde68a', 7);
-        }
-        return;
-      }
-      if (act === 'crouch') {
-        if (ATTACK_SPECS[actor.action]) return;
-        if (actor.y <= 1) {
-          actor.dir = naturalDir;
-          actor.action = 'crouch';
-          actor.actionTimer = 8;
-          actor.vx *= 0.4;
-          actor.blocking = true;
+          if (!fromNetwork && (state.mode === 'online' || (state.mode === 'tournament' && state.tourney.active))) {
+            broadcastMatchEvent({
+              type: 'cmd',
+              matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+              who,
+              act: 'jump',
+              moveDir: actor.moveDir,
+              x: Math.round(actor.x),
+              y: Math.round(actor.y)
+            });
+          }
         }
         return;
       }
@@ -2498,8 +2502,7 @@
       const spec = ATTACK_SPECS[act];
       if (!spec) return;
 
-      // Prevent interrupting an already active attack unless the previous attack is in its last 3 recovery frames
-      if (ATTACK_SPECS[actor.action] && actor.actionTimer > 3) return;
+      if (!fromNetwork && ATTACK_SPECS[actor.action] && actor.actionTimer > 3) return;
 
       if (act === 'super') {
         if (actor.specialUsedThisRound || actor.meter < 100) return;
@@ -2516,21 +2519,103 @@
       actor.blocking = false;
       actor.vx = actor.dir * (act === 'super' ? 8.0 : 3.4);
       sfx.swing();
+
+      if (!fromNetwork && (state.mode === 'online' || (state.mode === 'tournament' && state.tourney.active))) {
+        broadcastMatchEvent({
+          type: 'cmd',
+          matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+          who,
+          act,
+          x: Math.round(actor.x),
+          y: Math.round(actor.y)
+        });
+      }
+    }
+
+    function applyConfirmedHitOutcome(ev) {
+      const actor = ev.attackerWho === 'p1' ? state.p1 : state.p2;
+      const target = ev.attackerWho === 'p1' ? state.p2 : state.p1;
+      const spec = ATTACK_SPECS[ev.specKey] || ATTACK_SPECS.lp;
+
+      state.p1.hp = ev.p1Hp;
+      state.p2.hp = ev.p2Hp;
+      state.p1.meter = ev.p1Meter;
+      state.p2.meter = ev.p2Meter;
+      state.p1.x = ev.p1X;
+      state.p2.x = ev.p2X;
+
+      if (ev.outcome === 'tech') {
+        actor.vx = -actor.dir * 14;
+        target.vx = actor.dir * 14;
+        sfx.hit(false);
+        spawnSparks((actor.x + target.x) * 0.5, 90, '#a855f7', 16);
+        spawnPopup((actor.x + target.x) * 0.5, 145, 'THROW TECH!', '#a855f7');
+        updateArenaHUD();
+        return;
+      }
+
+      if (ev.outcome === 'special') {
+        startUnskippableSpecialMove(ev.attackerWho);
+        updateArenaHUD();
+        return;
+      }
+
+      const contactX = (actor.x + target.x) * 0.5;
+      const contactY = Math.max(actor.y, target.y) + (ev.specKey === 'rk' ? 45 : 88);
+
+      if (ev.outcome === 'block') {
+        sfx.hit(false);
+        target.comboCount = 0;
+        target.vx = ev.targetVx;
+        actor.vx = ev.actorVx;
+        target.recoil = -actor.dir * 0.16;
+        spawnSparks(contactX, contactY, '#38bdf8', 9);
+        spawnPopup(target.x, target.y + 145, ev.specKey === 'super' ? 'SPECIAL BLOCKED!' : 'BLOCKED', '#38bdf8');
+      } else {
+        sfx.hit(spec.heavy);
+        state.hitStop = spec.heavy ? 5 : 3;
+        state.shake = spec.heavy ? 11 : 5;
+
+        target.comboCount = ev.comboCount || 1;
+        target.action = 'hit';
+        target.actionTimer = spec.heavy ? 19 : 13;
+        target.actionMax = target.actionTimer;
+        target.hasHit = true;
+        target.blocking = false;
+        target.hitFlash = spec.heavy ? 9 : 5;
+        target.recoil = -actor.dir * (spec.heavy ? 0.48 : 0.30);
+        target.vx = ev.targetVx;
+        actor.vx = ev.actorVx;
+        if (ev.launchY > 0) {
+          target.vy = Math.max(target.vy, ev.launchY);
+          target.y = Math.max(target.y, 2);
+        }
+
+        const col = spec.heavy ? '#ef4444' : '#fde047';
+        spawnSparks(contactX, contactY, col, spec.heavy ? 20 : 12);
+        state.rings.push({ x: contactX, y: contactY, r: 8, maxR: spec.heavy ? 68 : 42, color: col, alpha: 1 });
+        const comboLabel = target.comboCount > 1 ? ` (${target.comboCount} HIT)` : '';
+        spawnPopup(target.x, target.y + 150, `${spec.label} -${Math.round(ev.dmg)}${comboLabel}`, col);
+      }
+
+      updateArenaHUD();
+
+      if (target.hp <= 0) {
+        finishRound(ev.attackerWho, 'K.O.!', !isLocalMatchArbiter());
+      }
     }
 
     function evaluateAttackHit(who) {
-      // Only the authoritative arbiter evaluates hitboxes and mutates HP/rounds so P1 & P2 never desync!
       if (!isLocalMatchArbiter()) return;
 
       const actor = who === 'p1' ? state.p1 : state.p2;
       const target = who === 'p1' ? state.p2 : state.p1;
-      const spec = ATTACK_SPECS[actor.action];
+      const specKey = actor.action;
+      const spec = ATTACK_SPECS[specKey];
       if (!spec || actor.hasHit) return;
 
       const frame = actor.actionMax - actor.actionTimer;
       if (frame < spec.activeStart || frame > spec.activeEnd) return;
-
-      // Respect brief wakeup invulnerability on a rising defender
       if (target.wakeupInvuln > 0) return;
 
       const dx = target.x - actor.x;
@@ -2538,36 +2623,55 @@
       const distX = Math.abs(dx);
       const distY = Math.abs(actor.y - target.y);
 
-      // Jumping opponents dodge ground throws and low sweeps
-      if ((actor.action === 'grab' || actor.action === 'rk') && target.y >= 42) return;
+      if ((specKey === 'grab' || specKey === 'rk') && target.y >= 42) return;
 
       if (rightWay && distX <= spec.range && distY <= 96) {
         actor.hasHit = true;
+        const mId = state.mode === 'online' ? 'duel' : state.tourney.currentMatchId;
 
-        // Classic Throw Tech: if both fighters are in startup/active frames of 'grab', they tech-push each other!
-        if (actor.action === 'grab' && target.action === 'grab' && !target.hasHit) {
+        if (specKey === 'grab' && target.action === 'grab' && !target.hasHit) {
           target.hasHit = true;
-          actor.vx = -actor.dir * 14;
-          target.vx = actor.dir * 14;
-          sfx.hit(false);
-          spawnSparks((actor.x + target.x) * 0.5, 90, '#a855f7', 16);
-          spawnPopup((actor.x + target.x) * 0.5, 145, 'THROW TECH!', '#a855f7');
+          const techEv = {
+            type: 'hit_event',
+            matchId: mId,
+            attackerWho: who,
+            specKey,
+            outcome: 'tech',
+            p1Hp: state.p1.hp,
+            p2Hp: state.p2.hp,
+            p1Meter: state.p1.meter,
+            p2Meter: state.p2.meter,
+            p1X: Math.round(state.p1.x),
+            p2X: Math.round(state.p2.x)
+          };
+          applyConfirmedHitOutcome(techEv);
+          if (state.mode === 'online' || state.mode === 'tournament') broadcastMatchEvent(techEv);
           return;
         }
 
         const isGuarded = target.blocking && !spec.unblockable && target.y === 0;
 
-        // SPECIAL MOVE CHECK: If Special Move ('super') connects and is NOT blocked -> trigger unskippable Special Move animation!
-        if (actor.action === 'super' && !isGuarded) {
-          startUnskippableSpecialMove(who);
-          if (state.mode === 'tournament' || state.mode === 'online') {
-            broadcastMyTourneyMatchSnapshot(true);
-          }
+        if (specKey === 'super' && !isGuarded) {
+          const specEv = {
+            type: 'hit_event',
+            matchId: mId,
+            attackerWho: who,
+            specKey,
+            outcome: 'special',
+            p1Hp: state.p1.hp,
+            p2Hp: state.p2.hp,
+            p1Meter: 0,
+            p2Meter: state.p2.meter,
+            p1X: Math.round(state.p1.x),
+            p2X: Math.round(state.p2.x)
+          };
+          applyConfirmedHitOutcome(specEv);
+          if (state.mode === 'online' || state.mode === 'tournament') broadcastMatchEvent(specEv);
           return;
         }
 
-        // Classic Combo Scaling + Rage Bonus (prevents 100-0 touch-of-death loops while rewarding comebacks)
         const rageMult = actor.hp <= 25 ? 1.15 : 1.0;
+        const nextCombo = isGuarded ? 0 : ((target.comboCount || 0) + 1);
         const comboScale = Math.max(0.55, 1.0 - (target.comboCount || 0) * 0.12);
         const dmg = isGuarded ? 1.0 : +(spec.dmg * rageMult * comboScale).toFixed(1);
 
@@ -2579,61 +2683,34 @@
           target.meter = Math.min(100, target.meter + 8);
         }
 
-        const contactX = actor.x + actor.dir * Math.min(distX * 0.65, 62);
-        const contactY = Math.max(actor.y, target.y) + (actor.action === 'rk' ? 45 : 88);
         const targetCornered = (target.x <= ARENA_MIN_X + 18) || (target.x >= ARENA_MAX_X - 18);
-
-        if (isGuarded) {
-          sfx.hit(false);
-          target.comboCount = 0;
-          const guardPush = spec.pushX * 0.55;
-          target.vx = actor.dir * guardPush;
-          // Classic Corner Pushback on Guard: push the attacker back when defender is against the wall!
-          if (targetCornered) {
-            actor.vx = -actor.dir * guardPush * 1.15;
-          }
-          target.recoil = -actor.dir * 0.16;
-          spawnSparks(contactX, contactY, '#38bdf8', 9);
-          spawnPopup(target.x, target.y + 145, actor.action === 'super' ? 'SPECIAL BLOCKED!' : 'BLOCKED', '#38bdf8');
-        } else {
-          sfx.hit(spec.heavy);
-          state.hitStop = spec.heavy ? 5 : 3;
-          state.shake = spec.heavy ? 11 : 5;
-
-          target.comboCount = (target.comboCount || 0) + 1;
-          target.action = 'hit';
-          target.actionTimer = spec.heavy ? 19 : 13;
-          target.actionMax = target.actionTimer;
-          target.hasHit = true; // Cancel any un-active startup attack on the victim
-          target.blocking = false;
-          target.hitFlash = spec.heavy ? 9 : 5;
-          target.recoil = -actor.dir * (spec.heavy ? 0.48 : 0.30);
-          target.vx = actor.dir * spec.pushX;
-
-          // Classic Corner Pushback on Hit: prevent infinite corner jab traps!
-          if (targetCornered) {
-            actor.vx = -actor.dir * (spec.pushX * 0.85);
-          }
-
-          if (spec.launchY > 0) {
-            target.vy = Math.max(target.vy, spec.launchY);
-            target.y = Math.max(target.y, 2);
-          }
-
-          const col = spec.heavy ? '#ef4444' : '#fde047';
-          spawnSparks(contactX, contactY, col, spec.heavy ? 20 : 12);
-          state.rings.push({ x: contactX, y: contactY, r: 8, maxR: spec.heavy ? 68 : 42, color: col, alpha: 1 });
-          const comboLabel = target.comboCount > 1 ? ` (${target.comboCount} HIT)` : '';
-          spawnPopup(target.x, target.y + 150, `${spec.label} -${Math.round(dmg)}${comboLabel}`, col);
+        let targetVx = actor.dir * (isGuarded ? spec.pushX * 0.55 : spec.pushX);
+        let actorVx = actor.vx;
+        if (targetCornered) {
+          actorVx = -actor.dir * (isGuarded ? spec.pushX * 0.65 : spec.pushX * 0.85);
         }
 
-        updateArenaHUD();
+        const hitEv = {
+          type: 'hit_event',
+          matchId: mId,
+          attackerWho: who,
+          specKey,
+          outcome: isGuarded ? 'block' : 'hit',
+          dmg,
+          comboCount: nextCombo,
+          targetVx: +targetVx.toFixed(1),
+          actorVx: +actorVx.toFixed(1),
+          launchY: isGuarded ? 0 : spec.launchY,
+          p1Hp: state.p1.hp,
+          p2Hp: state.p2.hp,
+          p1Meter: state.p1.meter,
+          p2Meter: state.p2.meter,
+          p1X: Math.round(state.p1.x),
+          p2X: Math.round(state.p2.x)
+        };
 
-        if (target.hp <= 0) {
-          finishRound(who, 'K.O.!');
-        } else if (state.mode === 'tournament' || state.mode === 'online') {
-          broadcastMyTourneyMatchSnapshot(true);
-        }
+        applyConfirmedHitOutcome(hitEv);
+        if (state.mode === 'online' || state.mode === 'tournament') broadcastMatchEvent(hitEv);
       }
     }
 
@@ -2928,7 +3005,6 @@
 
       drawArticulatedLimb(ctx, -dir * 12, -52, 28, 27, 14, 12, backShoulder, backElbow, flashBody, flashSkin, c.gloves, (act === 'rp' || act === 'super') ? activeGlow : null);
 
-      // Torso
       ctx.fillStyle = flashBody;
       ctx.strokeStyle = '#07090e';
       ctx.lineWidth = 2.4;
@@ -3016,7 +3092,6 @@
 
       drawArticulatedLimb(ctx, dir * 13, -51, 28, 28, 15, 12.5, frontShoulder, frontElbow, flashBody, flashSkin, c.gloves, (act === 'lp' || act === 'grab' || act === 'super') ? activeGlow : null);
 
-      // Subtle Guard Shield Aura when actively blocking
       if (p.blocking && act !== 'hit' && act !== 'ko') {
         ctx.save();
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
@@ -3747,7 +3822,7 @@
         ctx.fillStyle = '#3f3f46';
         ctx.beginPath();
         ctx.arc(w * 0.12, groundY + 2 * scale, 18 * scale, Math.PI, 0);
-        ctx.arc(w * 0.88, groundY + 4 * scale, 22 * scale, Math.PI, 0);
+        ctx.arc(w * 0.88, groundY + 4 * scale, 22 * scale, 0, Math.PI * 0);
         ctx.fill();
       }
     }
@@ -3769,25 +3844,25 @@
       const dist = Math.abs(dx);
       const foeAttacking = !!ATTACK_SPECS[foe.action];
 
-      // Smart Reactive Guard: if opponent is attacking within range, 35% chance to block!
       if (foeAttacking && dist < 155 && bot.y === 0 && Math.random() < 0.35) {
-        bot.blocking = true;
-        bot.action = Math.random() < 0.4 ? 'crouch' : 'walk';
-        bot.actionTimer = 10;
-        bot.vx = -bot.dir * 3.2;
-        bot.aiCooldown = 10;
+        bot.moveDir = dx > 0 ? -1 : 1;
+        bot.crouching = Math.random() < 0.4;
+        stepFighterMovementIntent(who);
+        bot.aiCooldown = 12;
         return;
       }
 
-      bot.blocking = false;
+      bot.crouching = false;
       if (dist > 132) {
-        performFighterAction(who, dx > 0 ? 'right' : 'left');
+        bot.moveDir = dx > 0 ? 1 : -1;
+        stepFighterMovementIntent(who);
         if (Math.random() < 0.12 && bot.y === 0) {
           performFighterAction(who, 'jump');
-          bot.vx = (dx > 0 ? 1 : -1) * 7.2;
         }
-        bot.aiCooldown = 9;
+        bot.aiCooldown = 10;
       } else {
+        bot.moveDir = 0;
+        stepFighterMovementIntent(who);
         if (bot.meter >= 100 && !bot.specialUsedThisRound && Math.random() < 0.45) {
           performFighterAction(who, 'super');
           bot.aiCooldown = 24;
@@ -3795,8 +3870,8 @@
           performFighterAction(who, 'grab');
           bot.aiCooldown = 20;
         } else if (Math.random() < 0.10 && bot.y === 0) {
+          bot.moveDir = dx > 0 ? 1 : -1;
           performFighterAction(who, 'jump');
-          bot.vx = (dx > 0 ? 1 : -1) * 7.6;
           bot.aiCooldown = 20;
         } else {
           const moves = ['lp', 'rp', 'lk', 'rk', 'grab'];
@@ -3825,15 +3900,11 @@
 
       if (state.cinematic) {
         updateSpecialCinematic();
-        if (arbiter && (state.mode === 'tournament' || state.mode === 'online') && now - state.tourney.lastSyncSent > 45) {
-          state.tourney.lastSyncSent = now;
-          broadcastMyTourneyMatchSnapshot(false);
-        }
         renderArena(time);
         return;
       }
 
-      // Authoritative Round Timer (Driven by Match Arbiter so both players never drift)
+      // Authoritative Round Timer
       if (arbiter && state.roundLive && !state.roundSettled && now - state.lastTimerTick >= 1000) {
         state.lastTimerTick = now;
         if (state.timer > 0) {
@@ -3852,27 +3923,24 @@
         return;
       }
 
-      // Apply continuous held movement & guard states for P1 and P2 without spamming network packets
+      // 1. Update local intent ONLY for the fighter slot controlled by THIS device (never overwrite remote fighters!)
       if (state.roundLive && !state.roundSettled) {
-        if (!state.tourney.bothAreBots) {
-          applyFighterContinuousInput('p1', state.p1Keys);
+        const mySlot = getLocalControlledSlot();
+        if (mySlot === 'p1') {
+          syncLocalKeysToFighterIntent('p1', state.p1Keys);
+        } else if (mySlot === 'p2') {
+          syncLocalKeysToFighterIntent('p2', state.p2Keys);
+        } else if (mySlot === 'both') {
+          syncLocalKeysToFighterIntent('p1', state.p1Keys);
+          syncLocalKeysToFighterIntent('p2', state.p2Keys);
         }
-        if (state.mode === '2p' || state.mode === 'online' || (state.mode === 'tournament' && !state.tourney.opponentIsBot && !state.tourney.bothAreBots)) {
-          applyFighterContinuousInput('p2', state.p2Keys);
-        }
+
+        // 2. Step deterministic movement for both fighters based on their active `moveDir` and `crouching` flags
+        stepFighterMovementIntent('p1');
+        stepFighterMovementIntent('p2');
       }
 
-      // Periodically sync P2's held input state to the Arbiter when P2 is a remote player
-      const isRemoteP2 = (state.mode === 'online' && state.onlineRole === 'guest') ||
-        (state.mode === 'tournament' && state.tourney.active && state.tourney.myMatchRole === 'p2');
-      if (isRemoteP2 && state.roundLive && now - state.tourney.lastInputSent > 60) {
-        if (state.p2Keys.left || state.p2Keys.right || state.p2Keys.down) {
-          state.tourney.lastInputSent = now;
-          sendP2InputStateNow();
-        }
-      }
-
-      // Integrate 2D Position, Velocity & Gravity
+      // 3. Integrate 2D Position, Velocity & Gravity
       [state.p1, state.p2].forEach(p => {
         p.x += p.vx;
         p.vx *= (p.y > 0 ? 0.94 : 0.74);
@@ -3908,7 +3976,7 @@
         }
       });
 
-      // Body Collision & Auto-Facing Update
+      // 4. Body Collision & Grounded Auto-Facing
       const maxJumpY = Math.max(state.p1.y, state.p2.y);
       const vertDiff = Math.abs(state.p1.y - state.p2.y);
       const jumpingOver = maxJumpY >= JUMP_OVER_HEIGHT && vertDiff >= 58;
@@ -3929,7 +3997,6 @@
         }
       }
 
-      // Auto-face opponent whenever grounded and not mid-attack or knocked out
       if (state.p1.y === 0 && !ATTACK_SPECS[state.p1.action] && state.p1.action !== 'ko' && state.p1.action !== 'win') {
         state.p1.dir = (state.p1.x <= state.p2.x) ? 1 : -1;
       }
@@ -3937,12 +4004,13 @@
         state.p2.dir = (state.p2.x < state.p1.x) ? 1 : -1;
       }
 
+      // 5. Authoritative Hit Evaluation
       if (state.roundLive && !state.roundSettled && arbiter) {
         evaluateAttackHit('p1');
         evaluateAttackHit('p2');
       }
 
-      // CPU / Tournament Bot AI (Executed by Match Arbiter)
+      // 6. CPU / Tournament Bot AI
       if (state.roundLive && !state.roundSettled && !state.cinematic && arbiter) {
         if (state.mode === 'cpu') {
           runBotBrainForSlot('p2');
@@ -3956,10 +4024,27 @@
         }
       }
 
-      // Periodic 22Hz Authoritative Snapshot Broadcast from Arbiter
-      if (arbiter && (state.mode === 'tournament' || state.mode === 'online') && !state.vsSplashActive && now - state.tourney.lastSyncSent > 45) {
+      // 7. Low-Frequency 500ms (2Hz) Drift-Correction Keyframe (Prevents MQTT broker throttling while keeping positions locked)
+      if (arbiter && (state.mode === 'tournament' || state.mode === 'online') && state.roundLive && !state.vsSplashActive && now - state.tourney.lastSyncSent > 500) {
         state.tourney.lastSyncSent = now;
-        broadcastMyTourneyMatchSnapshot(false);
+        broadcastMatchEvent({
+          type: 'sync_pos',
+          matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+          p1X: Math.round(state.p1.x),
+          p2X: Math.round(state.p2.x),
+          p1Move: state.p1.moveDir,
+          p2Move: state.p2.moveDir,
+          p1Crouch: state.p1.crouching,
+          p2Crouch: state.p2.crouching,
+          p1Hp: state.p1.hp,
+          p2Hp: state.p2.hp,
+          p1Meter: state.p1.meter,
+          p2Meter: state.p2.meter,
+          p1Wins: state.p1Wins,
+          p2Wins: state.p2Wins,
+          roundNumber: state.roundNumber,
+          timer: state.timer
+        });
       }
 
       renderArena(time);
@@ -4090,7 +4175,7 @@
     }
 
     // =========================================================================
-    // 10. DUAL-TRANSPORT ONLINE ENGINE (WEBSOCKET CLOUD RELAY + PEERJS WEBRTC)
+    // 10. TRI-TRANSPORT NETWORKING (DEDICATED NODE.JS WS + PEERJS + MQTT RELAY)
     // =========================================================================
     const PEER_ICE_CONFIG = {
       config: {
@@ -4132,6 +4217,7 @@
     function tagPacket(data) {
       data._pktId = state.tourney.myId + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
       data._senderId = state.tourney.myId;
+      if (state.roomCode) data._roomCode = state.roomCode;
       return data;
     }
 
@@ -4149,7 +4235,54 @@
       return false;
     }
 
+    // Connects to Dedicated Node.js WebSocket Server (if URL provided or same-origin Node.js server detected)
+    function connectNodeJsWsServer(customUrl = null) {
+      let url = customUrl ? customUrl.trim() : state.wsServerUrl;
+      if (!url && typeof window !== 'undefined' && window.location.protocol.startsWith('http') && !/github\.io|googleusercontent\.com/i.test(window.location.hostname)) {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        url = `${proto}//${window.location.host}/ws`;
+      }
+      if (!url) return;
+
+      try {
+        if (state.wsClient) {
+          try { state.wsClient.close(); } catch (e) {}
+        }
+        const ws = new WebSocket(url);
+        state.wsClient = ws;
+        ws.onopen = () => {
+          state.wsConnected = true;
+          state.wsServerUrl = url;
+          const dot = document.getElementById('wsServerDot');
+          const btn = document.getElementById('btnConnectWsServer');
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0';
+          if (btn) btn.textContent = 'WS LIVE ✓';
+          if (state.roomCode) {
+            ws.send(JSON.stringify({ type: 'ws_subscribe_room', roomCode: state.roomCode, playerId: state.tourney.myId }));
+          }
+        };
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            handleIncomingNetworkMessage(msg, null);
+          } catch (e) {}
+        };
+        ws.onclose = () => {
+          state.wsConnected = false;
+          const dot = document.getElementById('wsServerDot');
+          const btn = document.getElementById('btnConnectWsServer');
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
+          if (btn) btn.textContent = 'LINK WS';
+        };
+      } catch (e) {}
+    }
+
     function connectRoomCloudRelay(roomCode, onOpenCallback) {
+      if (state.wsClient && state.wsConnected) {
+        try {
+          state.wsClient.send(JSON.stringify({ type: 'ws_subscribe_room', roomCode, playerId: state.tourney.myId }));
+        } catch (e) {}
+      }
       if (typeof mqtt === 'undefined') {
         if (onOpenCallback) onOpenCallback();
         return;
@@ -4203,6 +4336,13 @@
     }
 
     function sendViaCloudRelay(data) {
+      // 1. Send via Dedicated Node.js WebSocket Server if connected
+      if (state.wsClient && state.wsConnected && state.wsClient.readyState === WebSocket.OPEN) {
+        try {
+          state.wsClient.send(JSON.stringify(data));
+        } catch (e) {}
+      }
+      // 2. Send via Serverless Cloud MQTT Relay
       if (mqttClient && mqttClient.connected && mqttTopic) {
         try {
           mqttClient.publish(mqttTopic, JSON.stringify(data), { qos: 0 });
@@ -4210,39 +4350,102 @@
       }
     }
 
-    function sendOnlinePacket(data) {
-      tagPacket(data);
-      sendViaCloudRelay(data);
-      if (state.conn && state.conn.open) {
-        try { state.conn.send(data); } catch (err) {}
+    function broadcastMatchEvent(pkt) {
+      tagPacket(pkt);
+      sendViaCloudRelay(pkt);
+      if (state.mode === 'online') {
+        if (state.conn && state.conn.open) {
+          try { state.conn.send(pkt); } catch (e) {}
+        }
+      } else if (state.onlineRole === 'host') {
+        Object.values(state.tourney.hostConns).forEach(c => {
+          if (c && c.open) { try { c.send(pkt); } catch (e) {} }
+        });
+      } else if (state.conn && state.conn.open) {
+        try { state.conn.send(pkt); } catch (e) {}
       }
     }
 
-    function sendP2InputStateNow() {
-      const isDuelGuest = (state.mode === 'online' && state.onlineRole === 'guest');
-      const isTourneyP2 = (state.mode === 'tournament' && state.tourney.active && state.tourney.myMatchRole === 'p2');
-      if (!isDuelGuest && !isTourneyP2) return;
+    function sendOnlinePacket(data) {
+      broadcastMatchEvent(data);
+    }
 
-      const pkt = {
-        type: 'tourney_p2_input',
-        matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
-        left: !!state.p2Keys.left,
-        right: !!state.p2Keys.right,
-        down: !!state.p2Keys.down,
-        x: Math.round(state.p2.x),
-        y: Math.round(state.p2.y),
-        vx: +(state.p2.vx || 0).toFixed(1),
-        vy: +(state.p2.vy || 0).toFixed(1)
-      };
+    function handleIncomingCombatSyncPacket(msg) {
+      const expectedMatchId = state.mode === 'online' ? 'duel' : state.tourney.currentMatchId;
+      if (!msg || msg.matchId !== expectedMatchId || state.vsSplashActive) return;
 
-      if (isDuelGuest) {
-        sendOnlinePacket(pkt);
-      } else {
-        sendTourneyPacketToHost(pkt);
+      if (msg.type === 'cmd') {
+        const mySlot = getLocalControlledSlot();
+        if (mySlot === msg.who) return; // Ignore echo of our own fighter slot
+        const actor = msg.who === 'p1' ? state.p1 : state.p2;
+
+        if (typeof msg.x === 'number' && Math.abs(actor.x - msg.x) > 16) {
+          actor.x = actor.x * 0.35 + msg.x * 0.65;
+        }
+        if (typeof msg.y === 'number' && Math.abs(actor.y - msg.y) > 20) {
+          actor.y = msg.y;
+        }
+
+        if (msg.act === 'move') {
+          actor.moveDir = msg.moveDir || 0;
+          actor.crouching = !!msg.crouching;
+          stepFighterMovementIntent(msg.who);
+        } else {
+          if (typeof msg.moveDir === 'number') actor.moveDir = msg.moveDir;
+          performFighterAction(msg.who, msg.act, true);
+        }
+        return;
+      }
+
+      if (msg.type === 'hit_event') {
+        if (!isLocalMatchArbiter()) {
+          applyConfirmedHitOutcome(msg);
+        }
+        return;
+      }
+
+      if (msg.type === 'round_event') {
+        if (!isLocalMatchArbiter()) {
+          state.p1Wins = msg.p1Wins;
+          state.p2Wins = msg.p2Wins;
+          if (msg.event === 'round_end' && !state.roundSettled) {
+            finishRound(msg.winnerWho, msg.reason || 'K.O.!', true);
+          }
+        }
+        return;
+      }
+
+      if (msg.type === 'sync_pos') {
+        if (!isLocalMatchArbiter() && !state.roundSettled) {
+          const mySlot = getLocalControlledSlot();
+          if (mySlot !== 'p1') {
+            state.p1.moveDir = msg.p1Move || 0;
+            state.p1.crouching = !!msg.p1Crouch;
+          }
+          if (mySlot !== 'p2') {
+            state.p2.moveDir = msg.p2Move || 0;
+            state.p2.crouching = !!msg.p2Crouch;
+          }
+          if (Math.abs(state.p1.x - msg.p1X) > 24) state.p1.x = state.p1.x * 0.5 + msg.p1X * 0.5;
+          if (Math.abs(state.p2.x - msg.p2X) > 24) state.p2.x = state.p2.x * 0.5 + msg.p2X * 0.5;
+          state.p1.hp = msg.p1Hp;
+          state.p2.hp = msg.p2Hp;
+          state.p1.meter = msg.p1Meter;
+          state.p2.meter = msg.p2Meter;
+          state.p1Wins = msg.p1Wins;
+          state.p2Wins = msg.p2Wins;
+          state.timer = msg.timer;
+          updateArenaHUD();
+        }
+        return;
       }
     }
 
     function handleIncomingDuelMessage(msg) {
+      if (['cmd', 'hit_event', 'round_event', 'sync_pos'].includes(msg.type)) {
+        handleIncomingCombatSyncPacket(msg);
+        return;
+      }
       if (msg.type === 'duel_join' && state.onlineRole === 'host') {
         sendOnlinePacket({ type: 'duel_welcome', p1Index: state.p1Index, p2Index: state.p2Index, stageKey: state.stageKey });
         document.getElementById('onlineStatusText').textContent = 'Friend Connected! Entering Character Select...';
@@ -4271,22 +4474,6 @@
         state.p2Index = msg.p2Index;
         state.stageKey = msg.stageKey;
         showScreen('arena');
-      } else if (msg.type === 'act') {
-        const targetPlayer = msg.who === 'p1' ? state.p1 : state.p2;
-        if (typeof msg.x === 'number' && Math.abs(targetPlayer.x - msg.x) > 45) targetPlayer.x = msg.x;
-        if (typeof msg.y === 'number' && Math.abs(targetPlayer.y - msg.y) > 45) targetPlayer.y = msg.y;
-        targetPlayer._remoteTriggered = true;
-        performFighterAction(msg.who, msg.act);
-        targetPlayer._remoteTriggered = false;
-      } else if (msg.type === 'tourney_p2_input' && msg.matchId === 'duel' && state.onlineRole === 'host') {
-        state.p2Keys.left = !!msg.left;
-        state.p2Keys.right = !!msg.right;
-        state.p2Keys.down = !!msg.down;
-        if (typeof msg.x === 'number' && Math.abs(state.p2.x - msg.x) < 90) {
-          state.p2.x = state.p2.x * 0.65 + msg.x * 0.35;
-        }
-      } else if (msg.type === 'tourney_snapshot' && msg.matchId === 'duel' && state.onlineRole === 'guest') {
-        applyRemoteMatchSnapshot(msg);
       }
     }
 
@@ -4294,7 +4481,20 @@
       if (isDuplicatePacket(msg)) return;
       if (msg._targetId && msg._targetId !== state.tourney.myId) return;
 
-      if (state.onlineSubMode === 'duel' || msg.type?.startsWith('duel_') || ['select', 'startArena', 'act'].includes(msg.type) || msg.matchId === 'duel') {
+      if (['cmd', 'hit_event', 'round_event', 'sync_pos'].includes(msg.type)) {
+        // If Host receives a PeerJS combat packet, relay to other PeerJS guests
+        if (state.onlineRole === 'host' && conn) {
+          Object.entries(state.tourney.hostConns).forEach(([pid, c]) => {
+            if (pid !== msg._senderId && c && c.open) {
+              try { c.send(msg); } catch (e) {}
+            }
+          });
+        }
+        handleIncomingCombatSyncPacket(msg);
+        return;
+      }
+
+      if (state.onlineSubMode === 'duel' || msg.type?.startsWith('duel_') || ['select', 'startArena'].includes(msg.type) || msg.matchId === 'duel') {
         handleIncomingDuelMessage(msg);
         return;
       }
@@ -4415,6 +4615,15 @@
           syncMyTourneyProfile();
         });
       }
+
+      document.getElementById('btnConnectWsServer')?.addEventListener('click', () => {
+        sfx.click();
+        const url = document.getElementById('inputWsServerUrl')?.value || '';
+        connectNodeJsWsServer(url);
+      });
+
+      // Auto-probe for same-origin Node.js WebSocket server if hosted on Node
+      connectNodeJsWsServer();
 
       document.getElementById('btnOpenProfileWizard')?.addEventListener('click', () => {
         sfx.click();
@@ -4678,7 +4887,6 @@
         showScreen('home');
       });
 
-      // Immediately refresh presence & sync when a mobile player returns from sharing the Room Code on WhatsApp/Discord
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && state.roomCode) {
           if (state.onlineRole === 'guest') {
@@ -4712,26 +4920,19 @@
             matchId: state.tourney.currentMatchId
           });
         }
-      }, 1500);
+      }, 2500);
 
       if (hostWatchdogInterval) clearInterval(hostWatchdogInterval);
       hostWatchdogInterval = setInterval(() => {
         if (!state.tourney.active || state.onlineRole !== 'host') return;
         const now = Date.now();
 
-        // Periodic 2s Authoritative State Beacon from Host so NO player is ever stuck in the lobby or out of sync!
-        if (!state.tourney._lastBeacon || now - state.tourney._lastBeacon >= 1800) {
-          state.tourney._lastBeacon = now;
-          broadcastHostTourneyState();
-        }
-
         if (state.tourney.phase === 'active') {
           const activeM = state.tourney.matches.find(m => m.status === 'fighting');
-          // Generous 28-second timeout ONLY for disconnected fighters blocking the current active match
           if (activeM) {
             [activeM.p1Id, activeM.p2Id].forEach(pid => {
               const p = state.tourney.players.find(x => x.id === pid);
-              if (p && !p.isBot && p.id !== state.tourney.myId && p.lastSeen && (now - p.lastSeen > 28000)) {
+              if (p && !p.isBot && p.id !== state.tourney.myId && p.lastSeen && (now - p.lastSeen > 30000)) {
                 handleHostPlayerDisconnected(p.id, 'timed out');
               }
             });
@@ -4870,14 +5071,11 @@
       renderTournamentLobbyUI();
     }
 
-    // Classic Arcade Seeding: Pair Humans & Bots cleanly and refresh all fighter portraits/nicknames
     function buildRoundMatchesFromPool(pool, roundNum, forceShuffle = false) {
       let candidates = [...pool];
       if (forceShuffle) {
         candidates.sort(() => Math.random() - 0.5);
       } else {
-        // Classic Tournament Anti-Double-BYE Rule:
-        // Anyone who received a BYE in an earlier round or has played fewer matches MUST be placed at index 0 so they fight next!
         candidates.sort((a, b) => {
           const byeDiff = (b.byeCount || 0) - (a.byeCount || 0);
           if (byeDiff !== 0) return byeDiff;
@@ -4896,7 +5094,6 @@
         if (i + 1 < candidates.length) {
           let p1 = candidates[i];
           let p2 = candidates[i + 1];
-          // Ensure a human player is always P1 (Arbiter) when facing an AI Bot
           if (p1.isBot && !p2.isBot) {
             const tmp = p1; p1 = p2; p2 = tmp;
           }
@@ -5084,46 +5281,6 @@
           broadcastHostTourneyState();
         }
 
-      } else if (msg.type === 'tourney_p2_input') {
-        const m = state.tourney.matches.find(x => x.id === msg.matchId);
-        if (!m || m.status !== 'fighting') return;
-        if (m.p1Id === state.tourney.myId) {
-          state.p2Keys.left = !!msg.left;
-          state.p2Keys.right = !!msg.right;
-          state.p2Keys.down = !!msg.down;
-          if (typeof msg.x === 'number' && Math.abs(state.p2.x - msg.x) < 90) {
-            state.p2.x = state.p2.x * 0.65 + msg.x * 0.35;
-          }
-        } else {
-          const c = state.tourney.hostConns[m.p1Id];
-          if (c && c.open) { try { c.send(msg); } catch (e) {} }
-        }
-
-      } else if (msg.type === 'tourney_p2_act') {
-        const m = state.tourney.matches.find(x => x.id === msg.matchId);
-        if (!m || m.status !== 'fighting') return;
-        if (m.p1Id === state.tourney.myId) {
-          if (typeof msg.x === 'number' && Math.abs(state.p2.x - msg.x) < 90) {
-            state.p2.x = state.p2.x * 0.6 + msg.x * 0.4;
-          }
-          state.p2._remoteTriggered = true;
-          performFighterAction('p2', msg.act);
-          state.p2._remoteTriggered = false;
-        } else {
-          const c = state.tourney.hostConns[m.p1Id];
-          if (c && c.open) { try { c.send(msg); } catch (e) {} }
-        }
-
-      } else if (msg.type === 'tourney_snapshot') {
-        if (state.tourney.currentMatchId === msg.matchId && !isLocalMatchArbiter()) {
-          applyRemoteMatchSnapshot(msg);
-        }
-        Object.entries(state.tourney.hostConns).forEach(([pid, c]) => {
-          if (pid !== msg._senderId && c && c.open) {
-            try { c.send(msg); } catch (e) {}
-          }
-        });
-
       } else if (msg.type === 'tourney_match_finished') {
         processHostMatchFinished(msg.matchId, msg.winnerId, msg.loserId, msg.p1Wins, msg.p2Wins, false);
 
@@ -5176,7 +5333,6 @@
             fighterIdx: state.tourney.myFighterIdx,
             ready: state.tourney.myPendingReady || false
           });
-          // Do not return early if tournament is already active — allow spectating while re-registering!
           if (msg.phase === 'lobby') return;
         }
 
@@ -5203,31 +5359,6 @@
         renderTournamentLobbyUI();
         syncLocalPlayerWithTourneyState(prevMatchId);
         renderArenaTournamentHUD();
-
-      } else if (msg.type === 'tourney_p2_input') {
-        if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole === 'p1') {
-          state.p2Keys.left = !!msg.left;
-          state.p2Keys.right = !!msg.right;
-          state.p2Keys.down = !!msg.down;
-          if (typeof msg.x === 'number' && Math.abs(state.p2.x - msg.x) < 90) {
-            state.p2.x = state.p2.x * 0.65 + msg.x * 0.35;
-          }
-        }
-
-      } else if (msg.type === 'tourney_p2_act') {
-        if (state.tourney.currentMatchId === msg.matchId && state.tourney.myMatchRole === 'p1') {
-          if (typeof msg.x === 'number' && Math.abs(state.p2.x - msg.x) < 90) {
-            state.p2.x = state.p2.x * 0.6 + msg.x * 0.4;
-          }
-          state.p2._remoteTriggered = true;
-          performFighterAction('p2', msg.act);
-          state.p2._remoteTriggered = false;
-        }
-
-      } else if (msg.type === 'tourney_snapshot') {
-        if (state.tourney.currentMatchId === msg.matchId && !isLocalMatchArbiter()) {
-          applyRemoteMatchSnapshot(msg);
-        }
 
       } else if (msg.type === 'tourney_challenge_request') {
         if (msg.toId === state.tourney.myId) {
@@ -5290,7 +5421,6 @@
       state.tourney.championId = null;
       state.tourney.currentMatchId = null;
 
-      // Refresh player metadata inside preview matches or rebuild Round 1 cleanly
       const built = buildRoundMatchesFromPool(players, 1, false);
       const realMatches = [];
       const pairedIds = new Set();
@@ -5363,11 +5493,9 @@
         return;
       }
 
-      // Refresh latest nicknames and fighter indices from player roster
       const p1Obj = state.tourney.players.find(p => p.id === nextMatch.p1Id);
       const p2Obj = state.tourney.players.find(p => p.id === nextMatch.p2Id);
 
-      // If one of the contenders left before their match started, auto-advance the remaining contender
       if (!p1Obj || !p2Obj) {
         const survivingId = p1Obj ? p1Obj.id : (p2Obj ? p2Obj.id : null);
         const missingId = !p1Obj ? nextMatch.p1Id : nextMatch.p2Id;
@@ -5516,7 +5644,6 @@
         return;
       }
 
-      // Force-close any open lobby or wizard modals so NO player is ever stuck in the lobby when the tournament is active!
       document.getElementById('modalOnlineLobby')?.classList.add('hidden');
       document.getElementById('modalTourneyWizard')?.classList.add('hidden');
       document.getElementById('modalControlsHelp')?.classList.add('hidden');
@@ -5565,7 +5692,6 @@
       const newRole = amIFightingThisMatch ? (activeMatch.p1Id === state.tourney.myId ? 'p1' : 'p2') : 'spectator';
       const vsKey = state.tourney.vsSplashKey || activeMatch.id;
 
-      // Always ensure the player is on the Arena screen during an active tournament
       if (state.screen !== 'arena') {
         state.screen = 'arena';
         document.getElementById('screenHome').classList.add('hidden');
@@ -5574,8 +5700,6 @@
         resizeArenaCanvas();
       }
 
-      // CRITICAL FIX: Reset match combat state (`p1Wins = 0`, `p2Wins = 0`, `hp = 100`, `matchSessionToken++`)
-      // SYNCHRONOUSLY BEFORE the 2.7s VS Splash Screen so leftover scores from Match 1 can NEVER leak into Match 2!
       if (prevMatchId !== activeMatch.id || lastShownVsKey !== vsKey) {
         lastShownVsKey = vsKey;
         state.mode = 'tournament';
@@ -5632,168 +5756,6 @@
       document.getElementById('hudP2Name').textContent = m.p2Nick;
       document.getElementById('hudP2Badge').textContent = 'LIVE 👁';
       renderArenaTournamentHUD();
-    }
-
-    function broadcastMyTourneyMatchSnapshot(forceImmediate = false, extraEvent = null) {
-      if (state.vsSplashActive && !forceImmediate) return;
-      const mId = state.mode === 'online' ? 'duel' : state.tourney.currentMatchId;
-      if (!mId) return;
-
-      const snap = {
-        type: 'tourney_snapshot',
-        matchId: mId,
-        roundNumber: state.roundNumber,
-        roundLive: state.roundLive,
-        roundSettled: state.roundSettled,
-        roundEndedWinner: extraEvent?.roundEndedWinner || null,
-        roundEndedReason: extraEvent?.roundEndedReason || null,
-        p1: {
-          x: Math.round(state.p1.x),
-          y: Math.round(state.p1.y),
-          vx: +(state.p1.vx || 0).toFixed(1),
-          vy: +(state.p1.vy || 0).toFixed(1),
-          dir: state.p1.dir,
-          hp: state.p1.hp,
-          meter: state.p1.meter,
-          specialUsedThisRound: state.p1.specialUsedThisRound,
-          blocking: state.p1.blocking,
-          action: state.p1.action,
-          actionTimer: state.p1.actionTimer,
-          actionMax: state.p1.actionMax,
-          slicedInHalf: state.p1.slicedInHalf,
-          sliceSlide: state.p1.sliceSlide,
-          shattered: state.p1.shattered,
-          headDetached: state.p1.headDetached,
-          buryDepth: state.p1.buryDepth,
-          flattened: state.p1.flattened,
-          choking: state.p1.choking,
-          burning: state.p1.burning,
-          lyingFlat: state.p1.lyingFlat
-        },
-        p2: {
-          x: Math.round(state.p2.x),
-          y: Math.round(state.p2.y),
-          vx: +(state.p2.vx || 0).toFixed(1),
-          vy: +(state.p2.vy || 0).toFixed(1),
-          dir: state.p2.dir,
-          hp: state.p2.hp,
-          meter: state.p2.meter,
-          specialUsedThisRound: state.p2.specialUsedThisRound,
-          blocking: state.p2.blocking,
-          action: state.p2.action,
-          actionTimer: state.p2.actionTimer,
-          actionMax: state.p2.actionMax,
-          slicedInHalf: state.p2.slicedInHalf,
-          sliceSlide: state.p2.sliceSlide,
-          shattered: state.p2.shattered,
-          headDetached: state.p2.headDetached,
-          buryDepth: state.p2.buryDepth,
-          flattened: state.p2.flattened,
-          choking: state.p2.choking,
-          burning: state.p2.burning,
-          lyingFlat: state.p2.lyingFlat
-        },
-        p1Wins: state.p1Wins,
-        p2Wins: state.p2Wins,
-        timer: state.timer,
-        cinematicWho: state.cinematic ? state.cinematic.who : null,
-        cinematicFrame: state.cinematic ? state.cinematic.frame : 0
-      };
-
-      if (state.mode === 'online') {
-        sendOnlinePacket(snap);
-      } else if (state.onlineRole === 'host') {
-        sendTourneyPacketFromHost(snap, null);
-      } else {
-        sendTourneyPacketToHost(snap);
-      }
-    }
-
-    function applyRemoteFighterStateSmooth(localF, remoteF, isLocallyControlled) {
-      if (!remoteF) return;
-      if (isLocallyControlled && remoteF.action !== 'hit' && remoteF.action !== 'ko' && remoteF.action !== 'win') {
-        // Smooth client-side prediction reconciliation for local P2 movement
-        if (Math.abs(localF.x - remoteF.x) > 55) {
-          localF.x = localF.x * 0.5 + remoteF.x * 0.5;
-        }
-        if (Math.abs(localF.y - remoteF.y) > 45) {
-          localF.y = remoteF.y;
-        }
-      } else {
-        // Smooth interpolation for remote fighter or when in hitstun/knockdown
-        if (Math.abs(localF.x - remoteF.x) > 90) {
-          localF.x = remoteF.x;
-        } else {
-          localF.x = localF.x * 0.35 + remoteF.x * 0.65;
-        }
-        localF.y = remoteF.y;
-        localF.vx = remoteF.vx || 0;
-        localF.vy = remoteF.vy || 0;
-        localF.action = remoteF.action;
-        localF.actionTimer = remoteF.actionTimer;
-        localF.actionMax = remoteF.actionMax;
-        localF.blocking = !!remoteF.blocking;
-      }
-
-      // Always take authoritative combat stats from Arbiter
-      localF.dir = remoteF.dir;
-      localF.hp = remoteF.hp;
-      localF.meter = remoteF.meter;
-      localF.specialUsedThisRound = !!remoteF.specialUsedThisRound;
-      localF.slicedInHalf = remoteF.slicedInHalf;
-      localF.sliceSlide = remoteF.sliceSlide;
-      localF.shattered = remoteF.shattered;
-      localF.headDetached = remoteF.headDetached;
-      localF.buryDepth = remoteF.buryDepth;
-      localF.flattened = remoteF.flattened;
-      localF.choking = remoteF.choking;
-      localF.burning = remoteF.burning;
-      localF.lyingFlat = remoteF.lyingFlat;
-    }
-
-    function applyRemoteMatchSnapshot(snap) {
-      const expectedMatchId = state.mode === 'online' ? 'duel' : state.tourney.currentMatchId;
-      if (!snap || snap.matchId !== expectedMatchId || state.vsSplashActive) return;
-
-      // Detect round transition initiated by the Arbiter
-      if (typeof snap.roundNumber === 'number' && snap.roundNumber > state.roundNumber) {
-        state.roundNumber = snap.roundNumber;
-        state.p1Wins = snap.p1Wins;
-        state.p2Wins = snap.p2Wins;
-        startRound();
-        return;
-      }
-
-      const amIP2 = (state.mode === 'online' && state.onlineRole === 'guest') ||
-        (state.mode === 'tournament' && state.tourney.myMatchRole === 'p2');
-
-      applyRemoteFighterStateSmooth(state.p1, snap.p1, false);
-      applyRemoteFighterStateSmooth(state.p2, snap.p2, amIP2);
-
-      state.p1Wins = snap.p1Wins;
-      state.p2Wins = snap.p2Wins;
-      state.timer = snap.timer;
-      if (typeof snap.roundLive === 'boolean' && !state.roundSettled) {
-        state.roundLive = snap.roundLive;
-      }
-
-      if (snap.cinematicWho && !state.cinematic) {
-        startUnskippableSpecialMove(snap.cinematicWho);
-      } else if (!snap.cinematicWho && state.cinematic) {
-        state.cinematic = null;
-        document.getElementById('specialDialogueBanner').classList.add('hidden');
-      }
-      if (state.cinematic && snap.cinematicFrame) {
-        state.cinematic.frame = snap.cinematicFrame;
-      }
-
-      updateArenaHUD();
-
-      // If the Arbiter signals a round/match finish, mirror the exact K.O. / KHATAM transition!
-      if ((snap.roundEndedWinner || snap.roundSettled) && !state.roundSettled) {
-        const winWho = snap.roundEndedWinner || (state.p1.hp <= 0 ? 'p2' : 'p1');
-        finishRound(winWho, snap.roundEndedReason || 'K.O.!', true);
-      }
     }
 
     function handleTournamentLocalMatchFinished(winnerSlot) {
@@ -5879,11 +5841,9 @@
       const m = state.tourney.matches.find(x => x.id === matchId);
       if (!m || m.status !== 'fighting') return;
 
-      // Guard against any stale/premature finish packet arriving within the first 4 seconds of match launch (unless forfeit/timeout)
       if (!isHostInternal && m.startedAt && (Date.now() - m.startedAt < 4500)) {
         return;
       }
-      // Verify winnerId and loserId actually belong to this match
       if (winnerId !== m.p1Id && winnerId !== m.p2Id) return;
 
       if (m._botTimer) { clearTimeout(m._botTimer); m._botTimer = null; }
@@ -6472,25 +6432,15 @@
         const who = getTouchWho();
         const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
 
-        const prevLeft = keyBag.left;
-        const prevRight = keyBag.right;
-        const prevDown = keyBag.down;
-
         keyBag.left = normX < -0.26;
         keyBag.right = normX > 0.26;
         keyBag.down = normY > 0.38;
-
-        if (prevLeft !== keyBag.left || prevRight !== keyBag.right || prevDown !== keyBag.down) {
-          sendP2InputStateNow();
-        }
+        syncLocalKeysToFighterIntent(who, keyBag);
 
         if (normY < -0.40) {
           if (!joyJumpTriggered) {
             joyJumpTriggered = true;
             performFighterAction(who, 'jump');
-            const actor = who === 'p1' ? state.p1 : state.p2;
-            if (keyBag.left) actor.vx = -7.2;
-            else if (keyBag.right) actor.vx = 7.2;
           }
         } else if (normY > -0.20) {
           joyJumpTriggered = false;
@@ -6510,7 +6460,7 @@
         keyBag.left = false;
         keyBag.right = false;
         keyBag.down = false;
-        sendP2InputStateNow();
+        syncLocalKeysToFighterIntent(who, keyBag);
       }
 
       if (joyZone) {
@@ -6599,26 +6549,17 @@
           e.preventDefault();
           btn.classList.add('pressed');
           const who = getTouchWho();
-          const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
-          if (act === 'left') keyBag.left = true;
-          else if (act === 'right') keyBag.right = true;
-          else if (act === 'crouch') keyBag.down = true;
           performFighterAction(who, act);
         });
 
         const mouseEnd = () => {
           btn.classList.remove('pressed');
-          const who = getTouchWho();
-          const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
-          if (act === 'left') keyBag.left = false;
-          else if (act === 'right') keyBag.right = false;
-          else if (act === 'crouch') keyBag.down = false;
         };
         btn.addEventListener('mouseup', mouseEnd);
         btn.addEventListener('mouseleave', mouseEnd);
       });
 
-      // Keyboard Controls (Supports ESC Pause, 1P, 2P Local Versus, Online Duel & Tournament)
+      // Keyboard Controls
       window.addEventListener('keydown', e => {
         if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
         if (e.key === 'Escape') {
@@ -6632,27 +6573,18 @@
         const primaryKeys = isOnlineGuest ? state.p2Keys : state.p1Keys;
 
         if (k === 'a' || (state.mode !== '2p' && e.key === 'ArrowLeft')) {
-          if (!primaryKeys.left) {
-            primaryKeys.left = true;
-            sendP2InputStateNow();
-          }
-          performFighterAction(primaryWho, 'left');
+          primaryKeys.left = true;
+          syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
         } else if (k === 'd' || (state.mode !== '2p' && e.key === 'ArrowRight')) {
-          if (!primaryKeys.right) {
-            primaryKeys.right = true;
-            sendP2InputStateNow();
-          }
-          performFighterAction(primaryWho, 'right');
+          primaryKeys.right = true;
+          syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
         } else if (k === 'w' || (state.mode !== '2p' && e.key === 'ArrowUp')) {
           e.preventDefault();
           performFighterAction(primaryWho, 'jump');
         } else if (k === 's' || (state.mode !== '2p' && e.key === 'ArrowDown')) {
           e.preventDefault();
-          if (!primaryKeys.down) {
-            primaryKeys.down = true;
-            sendP2InputStateNow();
-          }
-          performFighterAction(primaryWho, 'crouch');
+          primaryKeys.down = true;
+          syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
         } else if (k === 'f' || (state.mode !== '2p' && k === 'j')) {
           performFighterAction(primaryWho, 'lp');
         } else if (k === 'g' || (state.mode !== '2p' && k === 'k')) {
@@ -6671,17 +6603,17 @@
         if (state.mode === '2p') {
           if (e.key === 'ArrowLeft') {
             state.p2Keys.left = true;
-            performFighterAction('p2', 'left');
+            syncLocalKeysToFighterIntent('p2', state.p2Keys);
           } else if (e.key === 'ArrowRight') {
             state.p2Keys.right = true;
-            performFighterAction('p2', 'right');
+            syncLocalKeysToFighterIntent('p2', state.p2Keys);
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             performFighterAction('p2', 'jump');
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             state.p2Keys.down = true;
-            performFighterAction('p2', 'crouch');
+            syncLocalKeysToFighterIntent('p2', state.p2Keys);
           } else if (k === 'k' || e.key === '1') {
             performFighterAction('p2', 'lp');
           } else if (k === 'l' || e.key === '2') {
@@ -6703,6 +6635,7 @@
         const k = e.key.toLowerCase();
         const isOnlineGuest = (state.mode === 'online' && state.onlineRole === 'guest') ||
           (state.mode === 'tournament' && state.tourney.myMatchRole === 'p2');
+        const primaryWho = isOnlineGuest ? 'p2' : 'p1';
         const primaryKeys = isOnlineGuest ? state.p2Keys : state.p1Keys;
 
         let changed = false;
@@ -6716,12 +6649,14 @@
           primaryKeys.down = false;
           changed = true;
         }
-        if (changed) sendP2InputStateNow();
+        if (changed) syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
 
         if (state.mode === '2p') {
-          if (e.key === 'ArrowLeft') state.p2Keys.left = false;
-          else if (e.key === 'ArrowRight') state.p2Keys.right = false;
-          else if (e.key === 'ArrowDown') state.p2Keys.down = false;
+          let p2Changed = false;
+          if (e.key === 'ArrowLeft') { state.p2Keys.left = false; p2Changed = true; }
+          else if (e.key === 'ArrowRight') { state.p2Keys.right = false; p2Changed = true; }
+          else if (e.key === 'ArrowDown') { state.p2Keys.down = false; p2Changed = true; }
+          if (p2Changed) syncLocalKeysToFighterIntent('p2', state.p2Keys);
         }
       });
     }
