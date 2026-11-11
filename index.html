@@ -217,6 +217,54 @@
       animation: vsPulsePop 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
+  
+    /* Smartphone Ergonomic Fightpad & Touch Controls */
+    .fight-action-btn {
+      position: relative;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: transform 0.06s ease, box-shadow 0.08s ease, background-color 0.08s ease;
+    }
+    .fight-action-btn.pressed, .fight-action-btn:active {
+      transform: scale(0.88) !important;
+      filter: brightness(1.35);
+    }
+    .dpad-btn {
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: transform 0.06s ease, background-color 0.08s ease;
+    }
+    .dpad-btn.pressed, .dpad-btn:active {
+      transform: scale(0.88) !important;
+      background-color: rgba(56, 189, 248, 0.45) !important;
+      border-color: #38bdf8 !important;
+    }
+    @media (hover: none) and (pointer: coarse), screen and (max-width: 920px) {
+      .kb-hint {
+        display: none !important;
+      }
+    }
+    @media screen and (max-height: 560px) {
+      .fight-action-btn.strike-btn {
+        width: clamp(46px, 12.5dvh, 56px) !important;
+        height: clamp(46px, 12.5dvh, 56px) !important;
+      }
+      .fight-action-btn.util-btn {
+        width: clamp(42px, 11dvh, 52px) !important;
+        height: clamp(32px, 8.5dvh, 40px) !important;
+      }
+      .fight-action-btn.super-orb {
+        width: clamp(58px, 15.5dvh, 72px) !important;
+        height: clamp(58px, 15.5dvh, 72px) !important;
+      }
+      .dpad-btn {
+        width: clamp(38px, 10.5dvh, 46px) !important;
+        height: clamp(38px, 10.5dvh, 46px) !important;
+      }
+    }
+
   </style>
 </head>
 <body class="w-full h-full overflow-hidden relative bg-[#06070c]">
@@ -247,17 +295,26 @@
     </div>
   </div>
 
-  <!-- Top-Right Persistent Fullscreen, Audio & Controls Help Pill -->
-  <div class="fixed top-1.5 right-2.5 z-50 flex items-center gap-1.5">
-    <button id="btnToggleFullscreen" class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/40 font-hud font-bold text-[10px] sm:text-xs shadow">
+  <!-- Top-Right Persistent Fullscreen, Ping Toggle, Audio & Controls Help Pill -->
+  <div class="fixed top-1.5 right-2.5 z-50 flex items-center gap-1">
+    <button id="btnTogglePingHud" title="Show/Hide Corner Ping & Protocol Monitor" class="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-sky-300 border border-sky-500/40 font-hud font-bold text-[10px] sm:text-xs shadow">
+      📶 PING: ON
+    </button>
+    <button id="btnToggleFullscreen" class="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/40 font-hud font-bold text-[10px] sm:text-xs shadow">
       ⛶ FULL
     </button>
-    <button id="btnToggleControlsModal" class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700 font-hud font-bold text-[10px] sm:text-xs shadow">
+    <button id="btnToggleControlsModal" class="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700 font-hud font-bold text-[10px] sm:text-xs shadow">
       KEYS / HELP
     </button>
-    <button id="btnToggleSound" class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 font-hud font-bold text-[10px] sm:text-xs shadow">
+    <button id="btnToggleSound" class="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 font-hud font-bold text-[10px] sm:text-xs shadow">
       SFX: ON
     </button>
+  </div>
+
+  <!-- Tiny Unobtrusive Bottom-Left Corner Ping & Network Protocol Indicator -->
+  <div id="netPingCornerBadge" title="Tap to cycle Network Protocol" class="fixed bottom-1 left-2 z-50 px-1.5 py-0.5 rounded bg-slate-950/75 border border-slate-800/80 flex items-center gap-1 pointer-events-auto cursor-pointer select-none opacity-85 hover:opacity-100 transition-opacity">
+    <span id="netPingDot" class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+    <span id="netPingText" class="font-arcade text-[8px] sm:text-[9px] text-slate-300 tracking-tight leading-none">LOCAL • 60FPS</span>
   </div>
 
   <!-- ===================================================================== -->
@@ -375,21 +432,40 @@
             </div>
           </div>
 
-          <!-- Join Room Input + Join Button (Triggers Step 1: Nickname -> Step 2: Select Fighter -> Join Room!) -->
-          <div class="flex items-center gap-1.5">
-            <input id="inputJoinCode" type="text" maxlength="6" placeholder="ENTER 6-DIGIT CODE" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-arcade text-[10px] sm:text-xs uppercase text-white focus:outline-none focus:border-sky-400" />
-            <button id="btnJoinRoom" type="button" class="arcade-btn py-1.5 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-arcade font-black text-[9px] sm:text-xs shrink-0">
+          <!-- Join Room Input + Join Button + Leave Room Button -->
+          <div class="flex items-center gap-1">
+            <input id="inputJoinCode" type="text" maxlength="6" placeholder="6-DIGIT ROOM CODE" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-arcade text-[10px] sm:text-xs uppercase text-white focus:outline-none focus:border-sky-400" />
+            <button id="btnJoinRoom" type="button" class="arcade-btn py-1.5 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-arcade font-black text-[9px] sm:text-xs shrink-0">
               JOIN
+            </button>
+            <button id="btnLeaveRoom" type="button" class="hidden arcade-btn py-1.5 px-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-arcade font-bold text-[8px] sm:text-[9px] shrink-0" title="Leave Room (Auto-promotes next player to Host)">
+              🚪 LEAVE
             </button>
           </div>
 
-          <!-- Optional Dedicated Node.js WebSocket Server Bar (Auto-connects if hosted on Node.js, or works Serverless on GitHub Pages) -->
-          <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-800 rounded-lg px-2 py-1">
-            <span id="wsServerDot" class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Network Mode"></span>
-            <input id="inputWsServerUrl" type="text" placeholder="NODE.JS WS:// URL (OPTIONAL)" class="w-full bg-transparent text-[9px] font-hud text-slate-200 focus:outline-none" />
-            <button id="btnConnectWsServer" type="button" class="px-2 py-0.5 rounded bg-indigo-500/30 hover:bg-indigo-500/50 border border-indigo-400/50 text-indigo-200 font-arcade text-[8px] shrink-0">
-              LINK WS
-            </button>
+          <!-- Network Protocol Selector + Live Ping Readout + Optional Node.js WS URL -->
+          <div class="flex flex-col gap-1 bg-slate-900/90 border border-slate-800 rounded-lg p-1.5">
+            <div class="flex items-center justify-between gap-1">
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="text-[8px] font-arcade text-slate-400 uppercase shrink-0">NET:</span>
+                <select id="selectNetProtocol" class="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 font-arcade text-[8px] sm:text-[9px] text-sky-300 focus:outline-none">
+                  <option value="auto">⚡ AUTO (P2P + MQTT + WS)</option>
+                  <option value="mqtt">☁️ CLOUD MQTT RELAY</option>
+                  <option value="p2p">🔗 WEBRTC P2P DIRECT</option>
+                  <option value="ws">🚀 NODE.JS WEBSOCKET</option>
+                </select>
+              </div>
+              <span id="lobbyPingBadge" class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 font-arcade text-[8px] text-emerald-300 shrink-0">
+                📶 PING: --
+              </span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span id="wsServerDot" class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Node.js WebSocket Status"></span>
+              <input id="inputWsServerUrl" type="text" placeholder="OPTIONAL NODE.JS WS:// URL" class="w-full bg-slate-950/80 border border-slate-800 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] font-hud text-slate-200 focus:outline-none" />
+              <button id="btnConnectWsServer" type="button" class="px-1.5 py-0.5 rounded bg-indigo-500/30 hover:bg-indigo-500/50 border border-indigo-400/50 text-indigo-200 font-arcade text-[8px] shrink-0">
+                LINK WS
+              </button>
+            </div>
           </div>
         </div>
 
@@ -629,6 +705,9 @@
                 <button id="btnPauseToSelect" class="hidden sm:inline-block px-2 py-0.5 rounded bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700 font-arcade text-[9px] sm:text-[10px]">
                   ◀ SELECT
                 </button>
+                <button id="btnToggleTouchPadStyle" type="button" class="px-2 py-0.5 rounded bg-sky-950/90 hover:bg-sky-900 text-sky-300 border border-sky-500/50 font-arcade font-bold text-[8px] sm:text-[9px]" title="Switch Smartphone Movement Controls between Analog Thumbstick and 4-Button D-Pad">
+                  🕹 STICK
+                </button>
               </div>
               <div class="flex items-center gap-1.5">
                 <span id="hudP1SuperReady" class="hidden px-1.5 py-0.2 rounded bg-red-600 text-white font-arcade text-[8px] sm:text-[9px] animate-pulse">SPECIAL READY [R]</span>
@@ -844,48 +923,81 @@
       </div>
     </div>
 
-    <!-- Bottom Touch / Ergonomic Arcade Thumbstick & 5-Button Attack Deck (Inset Comfortably from Screen Edges!) -->
-    <div id="arenaFightpadContainer" class="absolute z-20 flex items-end justify-between pointer-events-none" style="bottom: clamp(18px, 6dvh, 36px); left: max(28px, 5.5vw); right: max(28px, 5.5vw);">
+    <!-- Smartphone-Ergonomic Arcade Touch Fightpad (Floating Stick OR Crisp D-Pad + Full Thumb-Arc Action Cluster) -->
+    <div id="arenaFightpadContainer" class="absolute z-20 flex items-end justify-between pointer-events-none" style="bottom: clamp(18px, 5.5dvh, 32px); left: max(16px, 3.5vw); right: max(16px, 3.5vw);">
 
-      <!-- Left Analog / 8-Way Virtual Arcade Thumbstick -->
-      <div id="virtualJoystickZone" class="pointer-events-auto p-2 flex items-center justify-center">
-        <div id="joystickBase" class="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-slate-950/75 backdrop-blur-md border-2 border-sky-400/50 shadow-[0_0_25px_rgba(14,165,233,0.25),inset_0_0_18px_rgba(14,165,233,0.2)] flex items-center justify-center">
-          <!-- Directional Axis Hints -->
-          <span class="absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-arcade font-bold text-sky-300/75 pointer-events-none">▲ JMP</span>
-          <span class="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] font-arcade font-bold text-amber-300/75 pointer-events-none">▼ BLK</span>
-          <span class="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-arcade font-bold text-slate-400/80 pointer-events-none">◀</span>
-          <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-arcade font-bold text-slate-400/80 pointer-events-none">▶</span>
-          <!-- Inner Center Ring -->
-          <div class="w-12 h-12 rounded-full border border-slate-700/70 pointer-events-none"></div>
-          <!-- Movable Thumbstick Ball-Top Knob -->
-          <div id="joystickKnob" class="absolute w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-900 border-2 border-sky-200 shadow-[0_4px_14px_rgba(0,0,0,0.8),0_0_14px_rgba(56,189,248,0.6)] flex items-center justify-center pointer-events-none transition-transform duration-75 ease-out">
-            <div class="w-4 h-4 rounded-full bg-white/30 blur-[1px] -translate-x-1 -translate-y-1"></div>
+      <!-- LEFT SIDE: Movement Controller (Smooth Floating Stick OR 4-Button D-Pad) -->
+      <div class="flex items-end gap-2 pointer-events-auto select-none">
+        <!-- Mode A: Smooth Responsive 8-Way Thumbstick -->
+        <div id="virtualJoystickZone" class="p-3 -m-2 flex items-center justify-center touch-none">
+          <div id="joystickBase" class="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-slate-950/55 border-2 border-sky-400/60 shadow-[0_0_24px_rgba(14,165,233,0.25),inset_0_0_18px_rgba(14,165,233,0.2)] flex items-center justify-center">
+            <span id="joyHintUp" class="absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-arcade font-black text-sky-300/80 pointer-events-none">▲ JMP</span>
+            <span id="joyHintDown" class="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] font-arcade font-black text-amber-300/80 pointer-events-none">▼ GRD</span>
+            <span id="joyHintLeft" class="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-arcade font-black text-slate-300/85 pointer-events-none">◀</span>
+            <span id="joyHintRight" class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-arcade font-black text-slate-300/85 pointer-events-none">▶</span>
+            <div class="w-11 h-11 rounded-full border border-sky-400/30 pointer-events-none"></div>
+            <div id="joystickKnob" class="absolute w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-900 border-2 border-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.85),0_0_16px_rgba(56,189,248,0.75)] flex items-center justify-center pointer-events-none">
+              <div class="w-4 h-4 rounded-full bg-white/40 blur-[1px] -translate-x-1 -translate-y-1"></div>
+            </div>
           </div>
+        </div>
+
+        <!-- Mode B: Crisp 4-Button Arcade D-Pad (Toggled via 🕹 STICK / ✚ D-PAD button) -->
+        <div id="virtualDpadZone" class="hidden flex-col items-center gap-1 bg-slate-950/55 p-2 rounded-3xl border border-sky-400/40 shadow-xl">
+          <button type="button" data-dpad="up" class="dpad-btn w-11 h-10 sm:w-12 sm:h-11 rounded-xl bg-slate-900/90 border-2 border-sky-400/60 text-sky-200 font-arcade font-black text-[10px] flex flex-col items-center justify-center shadow">
+            <span>▲</span><span class="text-[7px]">JUMP</span>
+          </button>
+          <div class="flex items-center gap-3">
+            <button type="button" data-dpad="left" class="dpad-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-slate-900/90 border-2 border-sky-400/60 text-white font-arcade font-black text-sm flex items-center justify-center shadow">
+              ◀
+            </button>
+            <button type="button" data-dpad="right" class="dpad-btn w-12 h-11 sm:w-14 sm:h-12 rounded-xl bg-slate-900/90 border-2 border-sky-400/60 text-white font-arcade font-black text-sm flex items-center justify-center shadow">
+              ▶
+            </button>
+          </div>
+          <button type="button" data-dpad="down" class="dpad-btn w-11 h-10 sm:w-12 sm:h-11 rounded-xl bg-slate-900/90 border-2 border-amber-400/60 text-amber-200 font-arcade font-black text-[10px] flex flex-col items-center justify-center shadow">
+            <span>▼</span><span class="text-[7px]">GUARD</span>
+          </button>
         </div>
       </div>
 
-      <!-- Right Action Pad: 2x2 Strike Grid (JAB, HEAVY, KICK, SWEEP) + Prominent Tall SPECIAL Button with Optimal Padding -->
-      <div class="flex items-center gap-2.5 sm:gap-3 pointer-events-auto bg-slate-950/75 backdrop-blur-md p-2.5 sm:p-3.5 rounded-3xl border border-slate-700/80 shadow-2xl">
-        <!-- 2x2 Core Strikes Grid -->
-        <div class="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <button data-p1-act="lp" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-blue-950/90 active:bg-blue-500 text-blue-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-blue-400/60 shadow-md flex flex-col items-center justify-center">
-            <span>JAB</span><span class="text-[8px] opacity-75">[F]</span>
+      <!-- RIGHT SIDE: Ergonomic Smartphone Arcade Combat Cluster (Guard, Grab, Jump + 4 Strikes + Special Orb) -->
+      <div id="rightCombatCluster" class="flex flex-col items-end gap-1.5 sm:gap-2 pointer-events-auto select-none touch-none">
+        <!-- Upper Utility Row: Dedicated GUARD (Hold), GRAB (Throw), and Quick JUMP Button -->
+        <div class="flex items-center gap-1.5 sm:gap-2 pr-1">
+          <button type="button" data-hold-guard="true" class="fight-action-btn util-btn w-12 h-9 sm:w-14 sm:h-10 rounded-full bg-amber-950/80 border-2 border-amber-400/75 text-amber-200 font-arcade font-black text-[8px] sm:text-[9px] shadow-lg flex flex-col items-center justify-center">
+            <span>🛡 GRD</span><span class="kb-hint text-[7px] opacity-70">[S]</span>
           </button>
-          <button data-p1-act="rp" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-indigo-950/90 active:bg-indigo-500 text-indigo-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-indigo-400/60 shadow-md flex flex-col items-center justify-center">
-            <span>HEAVY</span><span class="text-[8px] opacity-75">[G]</span>
+          <button type="button" data-p1-act="grab" class="fight-action-btn util-btn w-12 h-9 sm:w-14 sm:h-10 rounded-full bg-purple-950/80 border-2 border-purple-400/75 text-purple-200 font-arcade font-black text-[8px] sm:text-[9px] shadow-lg flex flex-col items-center justify-center">
+            <span>🤼 GRAB</span><span class="kb-hint text-[7px] opacity-70">[T]</span>
           </button>
-          <button data-p1-act="lk" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-emerald-950/90 active:bg-emerald-500 text-emerald-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-emerald-400/60 shadow-md flex flex-col items-center justify-center">
-            <span>KICK</span><span class="text-[8px] opacity-75">[H]</span>
-          </button>
-          <button data-p1-act="rk" class="touch-btn arcade-btn w-14 h-11 sm:w-16 sm:h-12 px-3 py-1.5 rounded-2xl bg-amber-950/90 active:bg-amber-500 text-amber-100 font-arcade font-bold text-[10px] sm:text-xs border-2 border-amber-400/60 shadow-md flex flex-col items-center justify-center">
-            <span>SWEEP</span><span class="text-[8px] opacity-75">[J]</span>
+          <button type="button" data-p1-act="jump" class="fight-action-btn util-btn w-12 h-9 sm:w-14 sm:h-10 rounded-full bg-sky-950/80 border-2 border-sky-400/75 text-sky-200 font-arcade font-black text-[8px] sm:text-[9px] shadow-lg flex flex-col items-center justify-center">
+            <span>▲ JUMP</span><span class="kb-hint text-[7px] opacity-70">[W]</span>
           </button>
         </div>
 
-        <!-- Dedicated Prominent SPECIAL Finisher Button -->
-        <button data-p1-act="super" class="special-touch-btn arcade-btn w-16 h-24 sm:w-20 sm:h-28 px-2.5 py-2 rounded-2xl bg-gradient-to-br from-red-600 via-orange-600 to-amber-500 text-white font-arcade font-black text-[10px] sm:text-xs border-2 border-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.45)] flex flex-col items-center justify-center gap-1">
-          <span>SPECIAL</span><span class="text-[8px] sm:text-[9px] bg-black/35 px-1.5 py-0.5 rounded opacity-95">[R]</span>
-        </button>
+        <!-- Main Lower Row: 2x2 Circular Strike Buttons + Large Glowing Special Finisher Orb -->
+        <div class="flex items-center gap-2 sm:gap-2.5 bg-slate-950/50 p-2 sm:p-2.5 rounded-[28px] border border-slate-700/60 shadow-2xl">
+          <div class="grid grid-cols-2 gap-1.5 sm:gap-2">
+            <button type="button" data-p1-act="lp" class="fight-action-btn strike-btn rounded-full bg-blue-950/85 border-2 border-sky-400/80 text-sky-100 font-arcade font-black text-[9px] sm:text-[10px] shadow-[0_0_12px_rgba(56,189,248,0.3)] flex flex-col items-center justify-center" style="width: 54px; height: 54px;">
+              <span>JAB</span><span class="text-[7px] opacity-70">[F]</span>
+            </button>
+            <button type="button" data-p1-act="rp" class="fight-action-btn strike-btn rounded-full bg-indigo-950/85 border-2 border-indigo-400/80 text-indigo-100 font-arcade font-black text-[9px] sm:text-[10px] shadow-[0_0_12px_rgba(129,140,248,0.3)] flex flex-col items-center justify-center" style="width: 54px; height: 54px;">
+              <span>HEAVY</span><span class="text-[7px] opacity-70">[G]</span>
+            </button>
+            <button type="button" data-p1-act="lk" class="fight-action-btn strike-btn rounded-full bg-emerald-950/85 border-2 border-emerald-400/80 text-emerald-100 font-arcade font-black text-[9px] sm:text-[10px] shadow-[0_0_12px_rgba(52,211,153,0.3)] flex flex-col items-center justify-center" style="width: 54px; height: 54px;">
+              <span>KICK</span><span class="text-[7px] opacity-70">[H]</span>
+            </button>
+            <button type="button" data-p1-act="rk" class="fight-action-btn strike-btn rounded-full bg-amber-950/85 border-2 border-amber-400/80 text-amber-100 font-arcade font-black text-[9px] sm:text-[10px] shadow-[0_0_12px_rgba(251,191,36,0.3)] flex flex-col items-center justify-center" style="width: 54px; height: 54px;">
+              <span>SWEEP</span><span class="text-[7px] opacity-70">[J]</span>
+            </button>
+          </div>
+
+          <!-- Dedicated Prominent SPECIAL Finisher Orb -->
+          <button type="button" data-p1-act="super" class="fight-action-btn super-orb w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-red-600 via-orange-600 to-amber-500 text-white font-arcade font-black text-[9px] sm:text-[10px] border-2 border-amber-200 shadow-[0_0_24px_rgba(245,158,11,0.55)] flex flex-col items-center justify-center gap-0.5">
+            <span>SPECIAL</span><span class="text-[8px] bg-black/45 px-1.5 py-0.2 rounded-full">[R]</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1487,21 +1599,21 @@
     const sfx = new ArcadeSoundAndVoice();
 
     // =========================================================================
-    // 3. GAME STATE & DETERMINISTIC EVENT-DRIVEN LOCKSTEP COMBAT ENGINE
+    // 3. GAME STATE & SPECIAL MOVE CINEMATIC CONTROLLER
     // =========================================================================
     const ARENA_MIN_X = 80;
     const ARENA_MAX_X = 920;
     const BODY_COLLISION_DIST = 72;
     const JUMP_OVER_HEIGHT = 80;
 
-    // Classic Arcade Frame Data & Hit Properties
+    // Balanced low damage for longer rounds + Special Move
     const ATTACK_SPECS = {
-      lp:    { dmg: 4.5, range: 116, duration: 15, activeStart: 4, activeEnd: 10, meterGain: 10, pushX: 9,  launchY: 0,    heavy: false, label: 'JAB' },
-      rp:    { dmg: 7.5, range: 126, duration: 22, activeStart: 6, activeEnd: 14, meterGain: 14, pushX: 15, launchY: 9.5,  heavy: true,  label: 'UPPERCUT' },
-      lk:    { dmg: 6.0, range: 136, duration: 18, activeStart: 5, activeEnd: 13, meterGain: 12, pushX: 12, launchY: 2.5,  heavy: false, label: 'HIGH KICK' },
-      rk:    { dmg: 8.0, range: 144, duration: 24, activeStart: 7, activeEnd: 16, meterGain: 15, pushX: 18, launchY: 6.5,  heavy: true,  label: 'SWEEP' },
-      grab:  { dmg: 9.5, range: 96,  duration: 24, activeStart: 5, activeEnd: 13, meterGain: 16, pushX: 22, launchY: 11.0, heavy: true,  unblockable: true, label: 'THROW' },
-      super: { dmg: 38.0, range: 215, duration: 28, activeStart: 5, activeEnd: 20, meterGain: -100, pushX: 26, launchY: 12.0, heavy: true, label: 'SPECIAL MOVE' }
+      lp:    { dmg: 4.5, range: 118, duration: 11, activeStart: 2, activeEnd: 8,  meterGain: 10, pushX: 8,  launchY: 0,    heavy: false, label: 'JAB' },
+      rp:    { dmg: 7.5, range: 128, duration: 16, activeStart: 4, activeEnd: 11, meterGain: 14, pushX: 14, launchY: 10.5, heavy: true,  label: 'UPPERCUT' },
+      lk:    { dmg: 6.0, range: 138, duration: 13, activeStart: 3, activeEnd: 10, meterGain: 12, pushX: 11, launchY: 2.5,  heavy: false, label: 'HIGH KICK' },
+      rk:    { dmg: 8.0, range: 146, duration: 18, activeStart: 5, activeEnd: 13, meterGain: 15, pushX: 18, launchY: 7.0,  heavy: true,  label: 'ROUNDHOUSE' },
+      grab:  { dmg: 9.5, range: 98,  duration: 18, activeStart: 4, activeEnd: 11, meterGain: 16, pushX: 22, launchY: 12.0, heavy: true,  unblockable: true, label: 'THROW' },
+      super: { dmg: 38.0, range: 220, duration: 20, activeStart: 4, activeEnd: 15, meterGain: -100, pushX: 28, launchY: 12.5, heavy: true, label: 'SPECIAL MOVE' }
     };
 
     function createFighterState(x, dir) {
@@ -1512,20 +1624,18 @@
         specialUsedThisRound: false,
         slicedInHalf: false,
         sliceSlide: 0,
-        x,
+        x: Number.isFinite(x) ? x : 270,
         y: 0,
         vx: 0,
         vy: 0,
-        dir,
-        moveDir: 0,       // -1 (walking left), 0 (neutral), +1 (walking right)
-        crouching: false, // true when holding crouch
+        dir: dir === -1 ? -1 : 1,
         action: 'idle',
         actionTimer: 0,
         actionMax: 1,
         hasHit: false,
         blocking: false,
-        wakeupInvuln: 0,
         comboCount: 0,
+        wakeupInvuln: 0,
         hitFlash: 0,
         recoil: 0,
         aiCooldown: 18,
@@ -1555,6 +1665,11 @@
       wsClient: null,
       wsConnected: false,
       wsServerUrl: '',
+      netProtocolPref: 'auto', // 'auto' | 'mqtt' | 'p2p' | 'ws'
+      showPingHud: true,
+      netPingMs: null,
+      netActiveProto: 'LOCAL',
+      touchControlStyle: 'stick', // 'stick' | 'dpad'
       roomCode: '',
       onlineSubMode: 'tournament', // 'tournament' | 'duel'
       matchSessionToken: 1,
@@ -1562,12 +1677,16 @@
       tourney: {
         active: false,
         stateSeq: 1,
+        hostId: null,
+        lastHostBeaconAt: 0,
+        inLobbyView: true,
         myId: 'p_' + Math.random().toString(36).substring(2, 8),
+        myJoinedAt: Date.now(),
         myNickname: 'FIGHTER_1',
         myFighterIdx: 0,
         phase: 'lobby', // 'lobby' | 'active' | 'champion'
         roundNum: 1,
-        roundTimeLeft: 120,
+        roundTimeLeft: 240,
         players: [],
         matches: [],
         championId: null,
@@ -1579,13 +1698,18 @@
         bothAreBots: false,
         hostConns: {},
         pendingChallengeFrom: null,
-        lastSyncSent: 0
+        lastSyncSent: 0,
+        snapSeq: 0,
+        lastAppliedSnapSeq: 0
       },
       selectSlot: 'p1',
       p1Index: 0,
       p2Index: 8,
       stageKey: 'student_park',
       roundNumber: 1,
+      roundPhase: 'countdown', // 'countdown' | 'fighting' | 'round_over' | 'match_over'
+      roundWinners: {}, // Map of { [roundNumber]: 'p1' | 'p2' } -> mathematically prevents skipping Round 2!
+      roundFightStartTime: 0,
       p1Wins: 0,
       p2Wins: 0,
       timer: 99,
@@ -1597,6 +1721,8 @@
       cinematic: null,
       p1Keys: { left: false, right: false, down: false },
       p2Keys: { left: false, right: false, down: false },
+      p1LastNetKeys: { left: false, right: false, down: false },
+      p2LastNetKeys: { left: false, right: false, down: false },
       p1: createFighterState(270, 1),
       p2: createFighterState(730, -1),
       particles: [],
@@ -1605,18 +1731,29 @@
       shards: []
     };
 
-    // Session-guarded timer so old round/match timeouts never fire in a later round or match
-    function scheduleMatchTimer(callback, delayMs) {
+    function recomputeRoundWinsFromLedger() {
+      let w1 = 0;
+      let w2 = 0;
+      Object.values(state.roundWinners || {}).forEach(w => {
+        if (w === 'p1') w1 += 1;
+        else if (w === 'p2') w2 += 1;
+      });
+      state.p1Wins = Math.min(2, w1);
+      state.p2Wins = Math.min(2, w2);
+    }
+
+    function scheduleMatchTimer(callback, delayMs, lockedRound = null) {
       const token = state.matchSessionToken;
       const matchIdSnapshot = state.tourney.currentMatchId;
+      const roundSnapshot = lockedRound !== null ? lockedRound : state.roundNumber;
       return setTimeout(() => {
         if (state.matchSessionToken !== token) return;
         if (state.mode === 'tournament' && state.tourney.currentMatchId !== matchIdSnapshot) return;
+        if (lockedRound !== null && state.roundNumber !== roundSnapshot) return;
         callback();
       }, delayMs);
     }
 
-    // Returns which fighter slot ('p1', 'p2', 'both', or null) THIS browser locally controls
     function getLocalControlledSlot() {
       if (state.mode === 'cpu') return 'p1';
       if (state.mode === '2p') return 'both';
@@ -1624,12 +1761,11 @@
       if (state.mode === 'tournament' && state.tourney.active) {
         if (state.tourney.myMatchRole === 'p1') return 'p1';
         if (state.tourney.myMatchRole === 'p2') return 'p2';
-        return null; // Spectators do NOT locally control p1 or p2!
+        return null;
       }
       return 'p1';
     }
 
-    // Returns true if this client is the authoritative combat arbiter for hit detection & round timer
     function isLocalMatchArbiter() {
       if (state.mode === 'cpu' || state.mode === '2p') return true;
       if (state.mode === 'online') return state.onlineRole !== 'guest';
@@ -1642,6 +1778,71 @@
         return false;
       }
       return true;
+    }
+
+    function triggerHaptic(ms = 10) {
+      try {
+        if (navigator && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(ms);
+        }
+      } catch (e) {}
+    }
+
+    function updatePingDisplays() {
+      const badge = document.getElementById('netPingCornerBadge');
+      const dot = document.getElementById('netPingDot');
+      const txt = document.getElementById('netPingText');
+      const lobbyBadge = document.getElementById('lobbyPingBadge');
+      const toggleBtn = document.getElementById('btnTogglePingHud');
+
+      if (toggleBtn) {
+        toggleBtn.textContent = `📶 PING: ${state.showPingHud ? 'ON' : 'OFF'}`;
+        toggleBtn.className = state.showPingHud
+          ? 'px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-sky-300 border border-sky-500/40 font-hud font-bold text-[10px] sm:text-xs shadow'
+          : 'px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-slate-900/90 hover:bg-slate-800 text-slate-400 border border-slate-700 font-hud font-bold text-[10px] sm:text-xs shadow';
+      }
+
+      if (badge) {
+        badge.classList.toggle('hidden', !state.showPingHud);
+      }
+
+      const isOnlineSession = !!state.roomCode && (state.mode === 'online' || state.mode === 'tournament' || !document.getElementById('modalOnlineLobby')?.classList.contains('hidden'));
+      if (!isOnlineSession) {
+        if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-sky-400';
+        if (txt) {
+          txt.className = 'font-arcade text-[8px] sm:text-[9px] text-slate-300 tracking-tight leading-none';
+          txt.textContent = 'LOCAL • 60FPS';
+        }
+        if (lobbyBadge) lobbyBadge.textContent = '📶 PING: READY';
+        return;
+      }
+
+      const ping = state.netPingMs;
+      const proto = state.netActiveProto || (state.wsConnected ? 'WS' : (mqttClient?.connected ? 'MQTT' : 'P2P'));
+      if (ping === null) {
+        if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
+        if (txt) txt.textContent = `${proto} • LINKED`;
+        if (lobbyBadge) lobbyBadge.textContent = `📶 ${proto}: LINKED`;
+      } else {
+        let colorCls = 'bg-emerald-400';
+        let textCls = 'text-emerald-300';
+        if (ping > 160) {
+          colorCls = 'bg-rose-500';
+          textCls = 'text-rose-300';
+        } else if (ping > 85) {
+          colorCls = 'bg-amber-400';
+          textCls = 'text-amber-300';
+        }
+        if (dot) dot.className = `w-1.5 h-1.5 rounded-full ${colorCls}`;
+        if (txt) {
+          txt.className = `font-arcade text-[8px] sm:text-[9px] ${textCls} tracking-tight leading-none`;
+          txt.textContent = `${ping}ms • ${proto}`;
+        }
+        if (lobbyBadge) {
+          lobbyBadge.className = `px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 font-arcade text-[8px] ${textCls} shrink-0`;
+          lobbyBadge.textContent = `📶 ${ping}ms (${proto})`;
+        }
+      }
     }
 
     // =========================================================================
@@ -1675,6 +1876,7 @@
           startMatch();
         }
       }
+      updatePingDisplays();
     }
 
     function togglePauseMenu(forceState = null) {
@@ -1771,11 +1973,15 @@
     }
 
     // =========================================================================
-    // 5. ROUND & MATCH FLOW (DETERMINISTIC, SESSION-LOCKED, DESYNC-PROOF)
+    // 5. MINI MILITIA DETERMINISTIC ROUND & MATCH STATE MACHINE
+    //    (Uses `roundWinners[roundNumber]` Ledger — Mathematically Impossible to Skip Round 2!)
     // =========================================================================
     function resetMatchCombatState() {
       state.matchSessionToken += 1;
       state.roundNumber = 1;
+      state.roundPhase = 'countdown';
+      state.roundWinners = {};
+      state.roundFightStartTime = performance.now();
       state.p1Wins = 0;
       state.p2Wins = 0;
       state.timer = 99;
@@ -1785,8 +1991,12 @@
       state.cinematic = null;
       state.hitStop = 0;
       state.shake = 0;
+      state.tourney.snapSeq = 0;
+      state.tourney.lastAppliedSnapSeq = 0;
       state.p1Keys = { left: false, right: false, down: false };
       state.p2Keys = { left: false, right: false, down: false };
+      state.p1LastNetKeys = { left: false, right: false, down: false };
+      state.p2LastNetKeys = { left: false, right: false, down: false };
       state.p1 = createFighterState(270, 1);
       state.p2 = createFighterState(730, -1);
       state.particles = [];
@@ -1806,8 +2016,11 @@
 
     function startRound() {
       state.matchSessionToken += 1;
+      const curRound = state.roundNumber;
+      state.roundPhase = 'countdown';
       state.roundLive = false;
       state.roundSettled = false;
+      state.roundFightStartTime = performance.now();
       state.cinematic = null;
       state.timer = 99;
       state.lastTimerTick = performance.now();
@@ -1815,10 +2028,18 @@
       state.p2 = createFighterState(730, -1);
       state.p1Keys = { left: false, right: false, down: false };
       state.p2Keys = { left: false, right: false, down: false };
+      state.p1LastNetKeys = { left: false, right: false, down: false };
+      state.p2LastNetKeys = { left: false, right: false, down: false };
       state.particles = [];
       state.popups = [];
       state.rings = [];
       state.shards = [];
+
+      if (state.mode === 'tournament' && state.tourney.active) {
+        state.tourney.roundTimeLeft = TOURNEY_ROUND_MAX_SEC;
+      }
+
+      recomputeRoundWinsFromLedger();
 
       const f1 = FIGHTERS[state.p1Index] || FIGHTERS[0];
       const f2 = FIGHTERS[state.p2Index] || FIGHTERS[8];
@@ -1838,75 +2059,90 @@
         document.getElementById('hudP2Badge').textContent = state.mode === 'cpu' ? 'CPU' : 'P2';
       }
 
-      document.getElementById('hudRoundTag').textContent = `RND ${state.roundNumber}`;
+      document.getElementById('hudRoundTag').textContent = `RND ${curRound}`;
       document.getElementById('specialDialogueBanner').classList.add('hidden');
 
       updateArenaHUD();
 
+      if (isLocalMatchArbiter() && (state.mode === 'online' || state.mode === 'tournament')) {
+        broadcastMatchEvent({
+          type: 'round_event',
+          event: 'round_start',
+          matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+          roundNumber: curRound,
+          roundWinners: state.roundWinners
+        });
+      }
+
       const p1Display = document.getElementById('hudP1Name')?.textContent || f1.name.toUpperCase();
       const p2Display = document.getElementById('hudP2Name')?.textContent || f2.name.toUpperCase();
-      const roundLabel = (state.p1Wins === 1 && state.p2Wins === 1) ? 'FINAL ROUND' : `ROUND ${state.roundNumber}`;
+      const roundLabel = (state.p1Wins === 1 && state.p2Wins === 1) ? 'FINAL ROUND' : `ROUND ${curRound}`;
 
-      if (state.roundNumber === 1) {
+      if (curRound === 1) {
         showArenaCallout('3', `${roundLabel} • ${p1Display} VS ${p2Display}`);
         sfx.tone(440, 'triangle', 0.14, 0.14, 440);
         scheduleMatchTimer(() => {
           showArenaCallout('2', `${roundLabel} • GET READY`);
           sfx.tone(520, 'triangle', 0.14, 0.14, 520);
-        }, 700);
+        }, 700, curRound);
         scheduleMatchTimer(() => {
           showArenaCallout('1', `${p1Display} VS ${p2Display}`);
           sfx.tone(660, 'triangle', 0.16, 0.16, 660);
-        }, 1400);
+        }, 1400, curRound);
         scheduleMatchTimer(() => {
           showArenaCallout('FIGHT!', `${p1Display} VS ${p2Display}`);
           sfx.announce('Round Start! Fight!', 'announcer');
+          state.roundPhase = 'fighting';
           state.roundLive = true;
+          state.roundFightStartTime = performance.now();
           state.lastTimerTick = performance.now();
-          scheduleMatchTimer(() => hideArenaCallout(), 700);
-        }, 2100);
+          scheduleMatchTimer(() => hideArenaCallout(), 700, curRound);
+        }, 2100, curRound);
       } else {
-        showArenaCallout(roundLabel, 'ROUND START');
-        sfx.announce('Round Start! Fight!', 'announcer');
+        showArenaCallout(roundLabel, `${p1Display} VS ${p2Display}`);
+        sfx.announce(`Round ${curRound}! Fight!`, 'announcer');
         scheduleMatchTimer(() => {
           showArenaCallout('FIGHT!', `${p1Display} VS ${p2Display}`);
+          state.roundPhase = 'fighting';
           state.roundLive = true;
+          state.roundFightStartTime = performance.now();
           state.lastTimerTick = performance.now();
-          scheduleMatchTimer(() => hideArenaCallout(), 700);
-        }, 1050);
+          scheduleMatchTimer(() => hideArenaCallout(), 700, curRound);
+        }, 1200, curRound);
       }
     }
 
-    function finishRound(winnerWho, reason = 'K.O.!', fromRemoteSync = false) {
-      if (state.roundSettled) return;
+    function finishRound(winnerWho, reason = 'K.O.!', fromRemoteSync = false, pktRoundNumber = null) {
+      const targetRound = pktRoundNumber !== null ? pktRoundNumber : state.roundNumber;
+      if (targetRound !== state.roundNumber) return;
+      if (state.roundSettled || state.roundWinners[targetRound]) return;
       if (!fromRemoteSync && !state.roundLive && !state.cinematic) return;
 
+      const finishedRoundNum = state.roundNumber;
       state.roundSettled = true;
       state.roundLive = false;
+      state.roundPhase = 'round_over';
       state.cinematic = null;
-      state.p1.moveDir = 0;
-      state.p2.moveDir = 0;
-      state.p1.crouching = false;
-      state.p2.crouching = false;
+      state.p1Keys = { left: false, right: false, down: false };
+      state.p2Keys = { left: false, right: false, down: false };
       document.getElementById('specialDialogueBanner').classList.add('hidden');
+
+      // Record winner in the immutable round ledger for this specific roundNumber!
+      // Round 1 can ONLY ever set roundWinners[1], so p1Wins/p2Wins after Round 1 can NEVER exceed 1!
+      state.roundWinners[finishedRoundNum] = (winnerWho === 'p1' ? 'p1' : 'p2');
+      recomputeRoundWinsFromLedger();
 
       triggerArenaFlash('#ef4444');
       state.shake = 18;
 
-      if (!fromRemoteSync) {
-        if (winnerWho === 'p1') {
-          state.p1Wins = Math.min(2, state.p1Wins + 1);
-        } else {
-          state.p2Wins = Math.min(2, state.p2Wins + 1);
-        }
-      }
-
       if (winnerWho === 'p1') {
+        state.p2.hp = 0;
         state.p2.action = 'ko';
         state.p2.actionTimer = 999;
         state.p1.action = 'win';
         state.p1.actionTimer = 999;
       } else {
+        state.p1.hp = 0;
         state.p1.action = 'ko';
         state.p1.actionTimer = 999;
         state.p2.action = 'win';
@@ -1915,7 +2151,6 @@
 
       updateArenaHUD();
 
-      // Authoritative Round-End Broadcast
       if (!fromRemoteSync && isLocalMatchArbiter() && (state.mode === 'tournament' || state.mode === 'online')) {
         broadcastMatchEvent({
           type: 'round_event',
@@ -1923,13 +2158,17 @@
           event: 'round_end',
           winnerWho,
           reason,
+          roundNumber: finishedRoundNum,
+          roundWinners: state.roundWinners,
           p1Wins: state.p1Wins,
-          p2Wins: state.p2Wins,
-          roundNumber: state.roundNumber
+          p2Wins: state.p2Wins
         });
       }
 
-      const isMatchOver = (state.p1Wins >= 2 || state.p2Wins >= 2);
+      // A match can ONLY end if at least 2 distinct rounds have been recorded in `roundWinners` and one fighter won 2!
+      const isMatchOver = (finishedRoundNum >= 2) && (state.p1Wins >= 2 || state.p2Wins >= 2);
+      if (isMatchOver) state.roundPhase = 'match_over';
+
       const fWin = FIGHTERS[winnerWho === 'p1' ? state.p1Index : state.p2Index] || FIGHTERS[0];
       const winDisplayName = (state.mode === 'tournament' && state.tourney.active)
         ? ((winnerWho === 'p1' ? document.getElementById('hudP1Name')?.textContent : document.getElementById('hudP2Name')?.textContent) || fWin.name.toUpperCase())
@@ -1939,7 +2178,7 @@
         showArenaCallout('KHATAM!', `${winDisplayName} WINS THE MATCH!`);
         sfx.announce('K O! Khatam!', 'announcer');
       } else {
-        showArenaCallout(reason, `${winDisplayName} TAKES ROUND ${state.roundNumber}`);
+        showArenaCallout(reason, `${winDisplayName} TAKES ROUND ${finishedRoundNum}`);
         sfx.announce('K O!', 'announcer');
       }
 
@@ -1959,11 +2198,10 @@
           document.getElementById('victoryScoreLine').textContent = `KHATAM! ${winTag} wins (${state.p1Wins} - ${state.p2Wins} Rounds)`;
           document.getElementById('modalMatchVictory').classList.remove('hidden');
         } else {
-          // Both Arbiter and Remote clients advance cleanly to the next round together
-          state.roundNumber += 1;
+          state.roundNumber = finishedRoundNum + 1;
           startRound();
         }
-      }, 2200);
+      }, 2300, finishedRoundNum);
     }
 
     function showArenaCallout(main, sub) {
@@ -1988,8 +2226,8 @@
     }
 
     function updateArenaHUD() {
-      const p1Hp = Math.max(0, Math.min(100, state.p1.hp));
-      const p2Hp = Math.max(0, Math.min(100, state.p2.hp));
+      const p1Hp = Math.max(0, Math.min(100, Number.isFinite(state.p1.hp) ? state.p1.hp : 100));
+      const p2Hp = Math.max(0, Math.min(100, Number.isFinite(state.p2.hp) ? state.p2.hp : 100));
       document.getElementById('hudP1Bar').style.width = `${p1Hp}%`;
       setTimeout(() => {
         const el = document.getElementById('hudP1Chip');
@@ -2015,11 +2253,8 @@
         const mySlot = getLocalControlledSlot();
         const activePlayer = mySlot === 'p2' ? state.p2 : state.p1;
         const isReady = activePlayer.meter >= 100 && !activePlayer.specialUsedThisRound;
-        spBtn.style.opacity = isReady ? '1' : '0.45';
-        const subLabel = spBtn.querySelectorAll('span')[1];
-        if (subLabel) {
-          subLabel.textContent = activePlayer.specialUsedThisRound ? 'USED' : (isReady ? 'READY!' : `${Math.floor(activePlayer.meter)}%`);
-        }
+        spBtn.style.opacity = isReady ? '1' : '0.52';
+        spBtn.classList.toggle('animate-pulse', isReady);
       }
 
       document.getElementById('hudP1Orbs').innerHTML = [0, 1].map(i =>
@@ -2042,13 +2277,9 @@
 
       attacker.meter = 0;
       attacker.specialUsedThisRound = true;
-      attacker.moveDir = 0;
-      attacker.crouching = false;
       attacker.vx = 0;
       attacker.vy = 0;
       attacker.y = 0;
-      defender.moveDir = 0;
-      defender.crouching = false;
       defender.vx = 0;
       defender.vy = 0;
       defender.y = 0;
@@ -2065,7 +2296,7 @@
         fighter: fAttacker,
         id: fAttacker.id,
         frame: 0,
-        maxFrames: 215,
+        maxFrames: 165,
         attackerStartX: attacker.x,
         defenderStartX: defender.x,
         defenderStartHp: defender.hp,
@@ -2152,7 +2383,7 @@
         }
       } else if (cin.id === 'lodajay') {
         attacker.action = 'lp';
-        const shotFrames = [50, 95, 140];
+        const shotFrames = [38, 74, 110];
         shotFrames.forEach((sf, idx) => {
           if (cin.frame === sf) {
             sfx.playGunshot();
@@ -2174,7 +2405,7 @@
         });
         if (defender.headDetached) {
           defender.headFlyX += d * 5.2;
-          defender.headFlyY += 2.2 - (cin.frame - 140) * 0.14;
+          defender.headFlyY += 2.6 - (cin.frame - 110) * 0.18;
           defender.headFlyRot += 0.22 * d;
         }
       } else if (cin.id === 'javier') {
@@ -2298,7 +2529,7 @@
       } else if (cin.id === 'navigator') {
         if (p < 0.48) {
           attacker.action = 'lp';
-          if (cin.frame === 45 || cin.frame === 80) {
+          if (cin.frame === 34 || cin.frame === 62) {
             defender.stabbedCones += 1;
             defender.action = 'hit';
             defender.hitFlash = 8;
@@ -2349,7 +2580,7 @@
           defender.hp = 0;
           updateArenaHUD();
           if (isLocalMatchArbiter()) {
-            finishRound(cin.who, 'SPECIAL K.O.!');
+            finishRound(cin.who, 'SPECIAL K.O.!', false, state.roundNumber);
           }
         } else {
           defender.flattened = 1.0;
@@ -2371,36 +2602,38 @@
     }
 
     // =========================================================================
-    // 7. DETERMINISTIC MOVEMENT & COMBAT HIT ENGINE (EVENT-DRIVEN LOCKSTEP)
+    // 7. MINI MILITIA INPUT-STATE SERIALIZATION & COMBAT ENGINE
+    //    (Uses Pure `p1Keys` & `p2Keys` — Zero Sticky Velocity Bugs!)
     // =========================================================================
-    // Translates local held keys (`p1Keys` or `p2Keys`) into `fighter.moveDir` (-1, 0, 1) and `fighter.crouching`
-    // ONLY for the locally controlled fighter, emitting a network packet ONLY when `moveDir` or `crouching` changes!
-    function syncLocalKeysToFighterIntent(who, keys) {
+    function emitLocalKeyStateIfChanged(who) {
+      const mySlot = getLocalControlledSlot();
+      if (mySlot !== who && mySlot !== 'both') return;
+      if (state.mode !== 'online' && !(state.mode === 'tournament' && state.tourney.active && state.tourney.myMatchRole !== 'spectator')) return;
+
+      const keys = who === 'p1' ? state.p1Keys : state.p2Keys;
+      const last = who === 'p1' ? state.p1LastNetKeys : state.p2LastNetKeys;
       const actor = who === 'p1' ? state.p1 : state.p2;
-      const newMoveDir = (keys.left && !keys.right) ? -1 : ((keys.right && !keys.left) ? 1 : 0);
-      const newCrouch = !!keys.down;
 
-      if (actor.moveDir !== newMoveDir || actor.crouching !== newCrouch) {
-        actor.moveDir = newMoveDir;
-        actor.crouching = newCrouch;
+      if (keys.left !== last.left || keys.right !== last.right || keys.down !== last.down) {
+        last.left = !!keys.left;
+        last.right = !!keys.right;
+        last.down = !!keys.down;
 
-        if (state.mode === 'online' || (state.mode === 'tournament' && state.tourney.active && state.tourney.myMatchRole !== 'spectator')) {
-          broadcastMatchEvent({
-            type: 'cmd',
-            matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
-            who,
-            act: 'move',
-            moveDir: newMoveDir,
-            crouching: newCrouch,
-            x: Math.round(actor.x),
-            y: Math.round(actor.y)
-          });
-        }
+        broadcastMatchEvent({
+          type: 'mm_input',
+          matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+          roundNumber: state.roundNumber,
+          who,
+          l: last.left ? 1 : 0,
+          r: last.right ? 1 : 0,
+          d: last.down ? 1 : 0,
+          x: Math.round(actor.x),
+          y: Math.round(actor.y)
+        });
       }
     }
 
-    // Steps a fighter's continuous movement & guard state on ALL clients using `actor.moveDir` and `actor.crouching`
-    function stepFighterMovementIntent(who) {
+    function applyHeldKeysToFighterPhysics(who, keys) {
       if (!state.roundLive || state.paused || state.cinematic) return;
       const actor = who === 'p1' ? state.p1 : state.p2;
       const target = who === 'p1' ? state.p2 : state.p1;
@@ -2410,29 +2643,32 @@
         return;
       }
 
-      const naturalDir = (actor.x <= target.x) ? 1 : -1;
-
-      // Never overwrite an active attack's animation or facing direction
       if (ATTACK_SPECS[actor.action]) {
         actor.blocking = false;
         return;
       }
 
+      const naturalDir = (actor.x <= target.x) ? 1 : -1;
       if (actor.y <= 1) {
         actor.dir = naturalDir;
       }
 
-      if (actor.crouching && actor.y <= 1) {
+      if (keys.down && actor.y <= 1) {
         actor.action = 'crouch';
         actor.actionTimer = 4;
         actor.vx *= 0.35;
         actor.blocking = true;
-        return;
-      }
-
-      if (actor.moveDir !== 0) {
-        const holdingBack = (naturalDir === 1 && actor.moveDir === -1) || (naturalDir === -1 && actor.moveDir === 1);
-        actor.vx = actor.moveDir * (holdingBack ? 5.6 : 6.8);
+      } else if (keys.left && !keys.right) {
+        const holdingBack = (naturalDir === 1);
+        actor.vx = holdingBack ? -7.2 : -8.5;
+        if (actor.y <= 1) {
+          actor.action = 'walk';
+          actor.actionTimer = 6;
+        }
+        actor.blocking = holdingBack && actor.y <= 1;
+      } else if (keys.right && !keys.left) {
+        const holdingBack = (naturalDir === -1);
+        actor.vx = holdingBack ? 7.2 : 8.5;
         if (actor.y <= 1) {
           actor.action = 'walk';
           actor.actionTimer = 6;
@@ -2457,18 +2693,32 @@
       const naturalDir = (actor.x <= target.x) ? 1 : -1;
 
       if (act === 'left') {
-        actor.moveDir = -1;
-        stepFighterMovementIntent(who);
+        actor.vx = -8.5;
+        actor.dir = naturalDir;
+        if (actor.y <= 1 && !ATTACK_SPECS[actor.action]) {
+          actor.action = 'walk';
+          actor.actionTimer = 8;
+        }
+        actor.blocking = (naturalDir === 1) && actor.y <= 1;
         return;
       }
       if (act === 'right') {
-        actor.moveDir = 1;
-        stepFighterMovementIntent(who);
+        actor.vx = 8.5;
+        actor.dir = naturalDir;
+        if (actor.y <= 1 && !ATTACK_SPECS[actor.action]) {
+          actor.action = 'walk';
+          actor.actionTimer = 8;
+        }
+        actor.blocking = (naturalDir === -1) && actor.y <= 1;
         return;
       }
       if (act === 'crouch') {
-        actor.crouching = true;
-        stepFighterMovementIntent(who);
+        if (actor.y <= 1 && !ATTACK_SPECS[actor.action]) {
+          actor.action = 'crouch';
+          actor.actionTimer = 8;
+          actor.vx *= 0.4;
+          actor.blocking = true;
+        }
         return;
       }
 
@@ -2476,11 +2726,13 @@
         if (ATTACK_SPECS[actor.action]) return;
         if (actor.y <= 1) {
           actor.dir = naturalDir;
-          actor.vy = 16.5;
+          actor.vy = 18.2;
           actor.y = 2;
-          if (actor.moveDir !== 0) actor.vx = actor.moveDir * 7.0;
+          const keys = who === 'p1' ? state.p1Keys : state.p2Keys;
+          if (keys.left && !keys.right) actor.vx = -8.2;
+          else if (keys.right && !keys.left) actor.vx = 8.2;
           actor.action = 'jump';
-          actor.actionTimer = 30;
+          actor.actionTimer = 24;
           actor.blocking = false;
           sfx.jump();
           spawnDustParticles(actor.x, 0, '#fde68a', 7);
@@ -2488,9 +2740,10 @@
             broadcastMatchEvent({
               type: 'cmd',
               matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+              roundNumber: state.roundNumber,
               who,
               act: 'jump',
-              moveDir: actor.moveDir,
+              vx: Math.round(actor.vx),
               x: Math.round(actor.x),
               y: Math.round(actor.y)
             });
@@ -2502,7 +2755,7 @@
       const spec = ATTACK_SPECS[act];
       if (!spec) return;
 
-      if (!fromNetwork && ATTACK_SPECS[actor.action] && actor.actionTimer > 3) return;
+      if (!fromNetwork && ATTACK_SPECS[actor.action] && actor.actionTimer > Math.floor(actor.actionMax * 0.42)) return;
 
       if (act === 'super') {
         if (actor.specialUsedThisRound || actor.meter < 100) return;
@@ -2517,13 +2770,14 @@
       actor.actionMax = spec.duration;
       actor.hasHit = false;
       actor.blocking = false;
-      actor.vx = actor.dir * (act === 'super' ? 8.0 : 3.4);
+      actor.vx = actor.dir * (act === 'super' ? 9.2 : 4.6);
       sfx.swing();
 
       if (!fromNetwork && (state.mode === 'online' || (state.mode === 'tournament' && state.tourney.active))) {
         broadcastMatchEvent({
           type: 'cmd',
           matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
+          roundNumber: state.roundNumber,
           who,
           act,
           x: Math.round(actor.x),
@@ -2537,12 +2791,12 @@
       const target = ev.attackerWho === 'p1' ? state.p2 : state.p1;
       const spec = ATTACK_SPECS[ev.specKey] || ATTACK_SPECS.lp;
 
-      state.p1.hp = ev.p1Hp;
-      state.p2.hp = ev.p2Hp;
-      state.p1.meter = ev.p1Meter;
-      state.p2.meter = ev.p2Meter;
-      state.p1.x = ev.p1X;
-      state.p2.x = ev.p2X;
+      if (Number.isFinite(ev.p1Hp)) state.p1.hp = ev.p1Hp;
+      if (Number.isFinite(ev.p2Hp)) state.p2.hp = ev.p2Hp;
+      if (Number.isFinite(ev.p1Meter)) state.p1.meter = ev.p1Meter;
+      if (Number.isFinite(ev.p2Meter)) state.p2.meter = ev.p2Meter;
+      if (Number.isFinite(ev.p1X)) state.p1.x = ev.p1X;
+      if (Number.isFinite(ev.p2X)) state.p2.x = ev.p2X;
 
       if (ev.outcome === 'tech') {
         actor.vx = -actor.dir * 14;
@@ -2566,26 +2820,26 @@
       if (ev.outcome === 'block') {
         sfx.hit(false);
         target.comboCount = 0;
-        target.vx = ev.targetVx;
-        actor.vx = ev.actorVx;
+        target.vx = ev.targetVx || 0;
+        actor.vx = ev.actorVx || 0;
         target.recoil = -actor.dir * 0.16;
         spawnSparks(contactX, contactY, '#38bdf8', 9);
         spawnPopup(target.x, target.y + 145, ev.specKey === 'super' ? 'SPECIAL BLOCKED!' : 'BLOCKED', '#38bdf8');
       } else {
         sfx.hit(spec.heavy);
-        state.hitStop = spec.heavy ? 5 : 3;
+        state.hitStop = spec.heavy ? 3 : 2;
         state.shake = spec.heavy ? 11 : 5;
 
         target.comboCount = ev.comboCount || 1;
         target.action = 'hit';
-        target.actionTimer = spec.heavy ? 19 : 13;
+        target.actionTimer = spec.heavy ? 15 : 10;
         target.actionMax = target.actionTimer;
         target.hasHit = true;
         target.blocking = false;
         target.hitFlash = spec.heavy ? 9 : 5;
         target.recoil = -actor.dir * (spec.heavy ? 0.48 : 0.30);
-        target.vx = ev.targetVx;
-        actor.vx = ev.actorVx;
+        target.vx = ev.targetVx || 0;
+        actor.vx = ev.actorVx || 0;
         if (ev.launchY > 0) {
           target.vy = Math.max(target.vy, ev.launchY);
           target.y = Math.max(target.y, 2);
@@ -2600,13 +2854,13 @@
 
       updateArenaHUD();
 
-      if (target.hp <= 0) {
-        finishRound(ev.attackerWho, 'K.O.!', !isLocalMatchArbiter());
+      if (target.hp <= 0 && isLocalMatchArbiter()) {
+        finishRound(ev.attackerWho, 'K.O.!', false, state.roundNumber);
       }
     }
 
     function evaluateAttackHit(who) {
-      if (!isLocalMatchArbiter()) return;
+      if (!isLocalMatchArbiter() || state.roundSettled) return;
 
       const actor = who === 'p1' ? state.p1 : state.p2;
       const target = who === 'p1' ? state.p2 : state.p1;
@@ -2634,6 +2888,7 @@
           const techEv = {
             type: 'hit_event',
             matchId: mId,
+            roundNumber: state.roundNumber,
             attackerWho: who,
             specKey,
             outcome: 'tech',
@@ -2655,6 +2910,7 @@
           const specEv = {
             type: 'hit_event',
             matchId: mId,
+            roundNumber: state.roundNumber,
             attackerWho: who,
             specKey,
             outcome: 'special',
@@ -2693,6 +2949,7 @@
         const hitEv = {
           type: 'hit_event',
           matchId: mId,
+          roundNumber: state.roundNumber,
           attackerWho: who,
           specKey,
           outcome: isGuarded ? 'block' : 'hit',
@@ -2765,10 +3022,11 @@
     }
 
     function resizeArenaCanvas() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const isCompactDevice = window.innerWidth < 960 || ('ontouchstart' in window);
+      const dpr = Math.min(window.devicePixelRatio || 1, isCompactDevice ? 1.5 : 2);
       if (arenaCanvas) {
-        arenaCanvas.width = window.innerWidth * dpr;
-        arenaCanvas.height = window.innerHeight * dpr;
+        arenaCanvas.width = Math.round(window.innerWidth * dpr);
+        arenaCanvas.height = Math.round(window.innerHeight * dpr);
       }
       if (homeBgCanvas) {
         homeBgCanvas.width = window.innerWidth;
@@ -2848,8 +3106,8 @@
       ctx.ellipse(screenX, groundY + 5 * scale, 40 * bodyScale * shadowScale, 10 * bodyScale * shadowScale, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      const breathe = Math.sin(time * 7) * 3;
-      const stride = act === 'walk' ? Math.sin(time * 16) : 0;
+      const breathe = Math.sin(time * 9.5) * 3.2;
+      const stride = act === 'walk' ? Math.sin(time * 22) : 0;
       let hipOffsetY = -74 + breathe;
       let spineAngle = (p.recoil || 0) + dir * 0.06;
 
@@ -3102,8 +3360,8 @@
         ctx.restore();
       }
 
-      ctx.restore(); // end spine
-      ctx.restore(); // end fighter root
+      ctx.restore();
+      ctx.restore();
 
       if (p.headDetached) {
         const mapX = vx => (vx / 1000) * ctx.canvas.width;
@@ -3148,7 +3406,7 @@
       ctx.save();
 
       if (cin.id === 'lodajay') {
-        const isFiring = [50, 51, 52, 53, 95, 96, 97, 98, 140, 141, 142, 143].includes(cin.frame);
+        const isFiring = [38, 39, 40, 41, 74, 75, 76, 77, 110, 111, 112, 113].includes(cin.frame);
         const kickbackX = isFiring ? -8 : 0;
         const kickRot = isFiring ? -0.14 : 0;
 
@@ -3822,132 +4080,121 @@
         ctx.fillStyle = '#3f3f46';
         ctx.beginPath();
         ctx.arc(w * 0.12, groundY + 2 * scale, 18 * scale, Math.PI, 0);
-        ctx.arc(w * 0.88, groundY + 4 * scale, 22 * scale, 0, Math.PI * 0);
+        ctx.arc(w * 0.88, groundY + 4 * scale, 22 * scale, Math.PI, 0);
         ctx.fill();
       }
     }
 
     // =========================================================================
-    // 9. MAIN 60FPS GAME LOOP & SMART AI CONTROLLER
+    // 9. MAIN 60FPS GAME LOOP & BALANCED ARCADE CPU AI (ZERO RUNAWAY / ZERO NaN)
     // =========================================================================
-    function runBotBrainForSlot(who) {
+    function stepCpuAiForSlot(who) {
       const bot = who === 'p1' ? state.p1 : state.p2;
       const foe = who === 'p1' ? state.p2 : state.p1;
+      const botKeys = who === 'p1' ? state.p1Keys : state.p2Keys;
+
+      // Always reset bot directional keys first so the CPU NEVER gets stuck running into a corner!
+      botKeys.left = false;
+      botKeys.right = false;
+      botKeys.down = false;
+
       if (bot.action === 'ko' || foe.action === 'ko' || bot.action === 'hit') return;
+
+      const dx = foe.x - bot.x;
+      const dist = Math.abs(dx);
+      const foeAttacking = !!ATTACK_SPECS[foe.action];
+
+      // If opponent is outside striking range (> 122px), walk smoothly TOWARD the opponent
+      if (dist > 122) {
+        if (dx > 0) botKeys.right = true;
+        else botKeys.left = true;
+      } else if (foeAttacking && dist < 135 && bot.y === 0) {
+        // Crouch-guard in place (zero horizontal movement toward corners!)
+        if (bot.aiCooldown > 4) {
+          botKeys.down = true;
+          return;
+        }
+      }
 
       if (bot.aiCooldown > 0) {
         bot.aiCooldown -= 1;
         return;
       }
 
-      const dx = foe.x - bot.x;
-      const dist = Math.abs(dx);
-      const foeAttacking = !!ATTACK_SPECS[foe.action];
-
-      if (foeAttacking && dist < 155 && bot.y === 0 && Math.random() < 0.35) {
-        bot.moveDir = dx > 0 ? -1 : 1;
-        bot.crouching = Math.random() < 0.4;
-        stepFighterMovementIntent(who);
-        bot.aiCooldown = 12;
-        return;
-      }
-
-      bot.crouching = false;
-      if (dist > 132) {
-        bot.moveDir = dx > 0 ? 1 : -1;
-        stepFighterMovementIntent(who);
-        if (Math.random() < 0.12 && bot.y === 0) {
+      if (dist > 130) {
+        if (Math.random() < 0.10 && bot.y === 0) {
           performFighterAction(who, 'jump');
         }
-        bot.aiCooldown = 10;
+        bot.aiCooldown = 14;
       } else {
-        bot.moveDir = 0;
-        stepFighterMovementIntent(who);
+        // Within combat range: execute attacks!
+        botKeys.left = false;
+        botKeys.right = false;
+        botKeys.down = false;
         if (bot.meter >= 100 && !bot.specialUsedThisRound && Math.random() < 0.45) {
           performFighterAction(who, 'super');
           bot.aiCooldown = 24;
         } else if (foe.blocking && dist <= 96 && Math.random() < 0.42) {
           performFighterAction(who, 'grab');
-          bot.aiCooldown = 20;
-        } else if (Math.random() < 0.10 && bot.y === 0) {
-          bot.moveDir = dx > 0 ? 1 : -1;
+          bot.aiCooldown = 22;
+        } else if (Math.random() < 0.08 && bot.y === 0) {
           performFighterAction(who, 'jump');
-          bot.aiCooldown = 20;
+          bot.aiCooldown = 22;
         } else {
           const moves = ['lp', 'rp', 'lk', 'rk', 'grab'];
           performFighterAction(who, moves[Math.floor(Math.random() * moves.length)]);
-          bot.aiCooldown = 19;
+          bot.aiCooldown = 20;
         }
       }
     }
 
-    function mainLoop(now) {
-      requestAnimationFrame(mainLoop);
-      const time = now * 0.001;
+    let lastMainLoopTime = 0;
+    let physicsTickAccum = 0;
 
-      if (state.screen === 'home') {
-        renderHomeBackground(time);
-        return;
-      }
-      if (state.screen !== 'arena') return;
-
-      if (state.paused || state.vsSplashActive) {
-        renderArena(time);
-        return;
-      }
-
-      const arbiter = isLocalMatchArbiter();
-
+    function stepSingle60HzPhysicsTick(arbiter) {
       if (state.cinematic) {
         updateSpecialCinematic();
-        renderArena(time);
         return;
-      }
-
-      // Authoritative Round Timer
-      if (arbiter && state.roundLive && !state.roundSettled && now - state.lastTimerTick >= 1000) {
-        state.lastTimerTick = now;
-        if (state.timer > 0) {
-          state.timer -= 1;
-          document.getElementById('hudTimer').textContent = String(state.timer).padStart(2, '0');
-          if (state.timer === 0) {
-            const winWho = state.p1.hp >= state.p2.hp ? 'p1' : 'p2';
-            finishRound(winWho, 'TIME OVER!');
-          }
-        }
       }
 
       if (state.hitStop > 0) {
         state.hitStop -= 1;
-        renderArena(time);
         return;
       }
 
-      // 1. Update local intent ONLY for the fighter slot controlled by THIS device (never overwrite remote fighters!)
-      if (state.roundLive && !state.roundSettled) {
-        const mySlot = getLocalControlledSlot();
-        if (mySlot === 'p1') {
-          syncLocalKeysToFighterIntent('p1', state.p1Keys);
-        } else if (mySlot === 'p2') {
-          syncLocalKeysToFighterIntent('p2', state.p2Keys);
-        } else if (mySlot === 'both') {
-          syncLocalKeysToFighterIntent('p1', state.p1Keys);
-          syncLocalKeysToFighterIntent('p2', state.p2Keys);
+      // 1. Step CPU / Tournament Bot AI (sets botKeys cleanly every tick)
+      if (state.roundLive && !state.roundSettled && !state.cinematic && arbiter) {
+        if (state.mode === 'cpu') {
+          stepCpuAiForSlot('p2');
+        } else if (state.mode === 'tournament' && state.tourney.active) {
+          if (state.tourney.bothAreBots) {
+            stepCpuAiForSlot('p1');
+            stepCpuAiForSlot('p2');
+          } else if (state.tourney.opponentIsBot) {
+            stepCpuAiForSlot('p2');
+          }
         }
-
-        // 2. Step deterministic movement for both fighters based on their active `moveDir` and `crouching` flags
-        stepFighterMovementIntent('p1');
-        stepFighterMovementIntent('p2');
       }
 
-      // 3. Integrate 2D Position, Velocity & Gravity
-      [state.p1, state.p2].forEach(p => {
+      // 2. Apply Held Directional Keys (`p1Keys` and `p2Keys`) to Fighter Physics
+      if (state.roundLive && !state.roundSettled) {
+        applyHeldKeysToFighterPhysics('p1', state.p1Keys);
+        applyHeldKeysToFighterPhysics('p2', state.p2Keys);
+      }
+
+      // 3. Integrate 2D Position, Velocity & Crisp Arcade Gravity (with NaN-proof clamping)
+      [state.p1, state.p2].forEach((p, idx) => {
+        if (!Number.isFinite(p.vx)) p.vx = 0;
+        if (!Number.isFinite(p.vy)) p.vy = 0;
+        if (!Number.isFinite(p.x)) p.x = idx === 0 ? 270 : 730;
+        if (!Number.isFinite(p.y)) p.y = 0;
+
         p.x += p.vx;
-        p.vx *= (p.y > 0 ? 0.94 : 0.74);
+        p.vx *= (p.y > 0 ? 0.95 : 0.76);
 
         if (p.y > 0 || p.vy !== 0) {
           p.y += p.vy;
-          p.vy -= 0.82;
+          p.vy -= 1.04;
           if (p.y <= 0) {
             p.y = 0;
             p.vy = 0;
@@ -3956,7 +4203,7 @@
               p.action = 'idle';
               p.actionTimer = 0;
               p.comboCount = 0;
-              p.wakeupInvuln = 12;
+              p.wakeupInvuln = 10;
             }
             spawnDustParticles(p.x, 0, '#94a3b8', 5);
           }
@@ -3965,7 +4212,7 @@
         p.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, p.x));
         if (p.hitFlash > 0) p.hitFlash -= 1;
         if (p.wakeupInvuln > 0) p.wakeupInvuln -= 1;
-        p.recoil *= 0.82;
+        p.recoil = Number.isFinite(p.recoil) ? p.recoil * 0.80 : 0;
 
         if (p.actionTimer > 0) {
           p.actionTimer -= 1;
@@ -4009,41 +4256,77 @@
         evaluateAttackHit('p1');
         evaluateAttackHit('p2');
       }
+    }
 
-      // 6. CPU / Tournament Bot AI
-      if (state.roundLive && !state.roundSettled && !state.cinematic && arbiter) {
-        if (state.mode === 'cpu') {
-          runBotBrainForSlot('p2');
-        } else if (state.mode === 'tournament' && state.tourney.active) {
-          if (state.tourney.bothAreBots) {
-            runBotBrainForSlot('p1');
-            runBotBrainForSlot('p2');
-          } else if (state.tourney.opponentIsBot) {
-            runBotBrainForSlot('p2');
+    function mainLoop(now) {
+      requestAnimationFrame(mainLoop);
+      if (!lastMainLoopTime) lastMainLoopTime = now;
+      const elapsedMs = Math.min(64, Math.max(0, now - lastMainLoopTime));
+      lastMainLoopTime = now;
+      const time = now * 0.001;
+
+      if (state.screen === 'home') {
+        renderHomeBackground(time);
+        return;
+      }
+      if (state.screen !== 'arena') return;
+
+      if (state.paused || state.vsSplashActive) {
+        renderArena(time);
+        return;
+      }
+
+      const arbiter = isLocalMatchArbiter();
+
+      // Authoritative Round Timer
+      if (arbiter && state.roundLive && !state.roundSettled && !state.cinematic && now - state.lastTimerTick >= 1000) {
+        state.lastTimerTick = now;
+        if (state.timer > 0) {
+          state.timer -= 1;
+          document.getElementById('hudTimer').textContent = String(state.timer).padStart(2, '0');
+          if (state.timer === 0) {
+            const winWho = state.p1.hp >= state.p2.hp ? 'p1' : 'p2';
+            finishRound(winWho, 'TIME OVER!', false, state.roundNumber);
           }
         }
       }
 
-      // 7. Low-Frequency 500ms (2Hz) Drift-Correction Keyframe (Prevents MQTT broker throttling while keeping positions locked)
-      if (arbiter && (state.mode === 'tournament' || state.mode === 'online') && state.roundLive && !state.vsSplashActive && now - state.tourney.lastSyncSent > 500) {
+      // Frame-rate independent 60Hz Fixed-Timestep Accumulator:
+      // Guarantees animations, jumps, attacks, and special cutscenes ALWAYS run at full 60fps real-time speed
+      // even if mobile battery saver or browser compositing drops display refresh to 30fps!
+      physicsTickAccum += elapsedMs / (1000 / 60);
+      if (physicsTickAccum < 0.75) {
+        // High-refresh display (e.g. 120Hz): wait until a full 60Hz tick accumulates
+      } else {
+        const ticksToRun = Math.min(3, Math.max(1, Math.round(physicsTickAccum)));
+        physicsTickAccum = Math.max(0, physicsTickAccum - ticksToRun);
+        for (let t = 0; t < ticksToRun; t++) {
+          stepSingle60HzPhysicsTick(arbiter);
+        }
+      }
+
+      // 6. Mini Militia 10Hz (100ms) Compact Authoritative State Sync Packet (`mm_snap`)
+      if (arbiter && (state.mode === 'tournament' || state.mode === 'online') && state.roundLive && !state.roundSettled && !state.vsSplashActive && !state.cinematic && now - state.tourney.lastSyncSent > 100) {
         state.tourney.lastSyncSent = now;
+        state.tourney.snapSeq = (state.tourney.snapSeq || 0) + 1;
         broadcastMatchEvent({
-          type: 'sync_pos',
+          type: 'mm_snap',
           matchId: state.mode === 'online' ? 'duel' : state.tourney.currentMatchId,
-          p1X: Math.round(state.p1.x),
-          p2X: Math.round(state.p2.x),
-          p1Move: state.p1.moveDir,
-          p2Move: state.p2.moveDir,
-          p1Crouch: state.p1.crouching,
-          p2Crouch: state.p2.crouching,
-          p1Hp: state.p1.hp,
-          p2Hp: state.p2.hp,
-          p1Meter: state.p1.meter,
-          p2Meter: state.p2.meter,
-          p1Wins: state.p1Wins,
-          p2Wins: state.p2Wins,
           roundNumber: state.roundNumber,
-          timer: state.timer
+          s: state.tourney.snapSeq,
+          x1: Math.round(state.p1.x),
+          y1: Math.round(state.p1.y),
+          x2: Math.round(state.p2.x),
+          y2: Math.round(state.p2.y),
+          k1: (state.p1Keys.left ? 1 : 0) | (state.p1Keys.right ? 2 : 0) | (state.p1Keys.down ? 4 : 0),
+          k2: (state.p2Keys.left ? 1 : 0) | (state.p2Keys.right ? 2 : 0) | (state.p2Keys.down ? 4 : 0),
+          hp1: state.p1.hp,
+          hp2: state.p2.hp,
+          m1: state.p1.meter,
+          m2: state.p2.meter,
+          w1: state.p1Wins,
+          w2: state.p2Wins,
+          t: state.timer
         });
       }
 
@@ -4175,7 +4458,7 @@
     }
 
     // =========================================================================
-    // 10. TRI-TRANSPORT NETWORKING (DEDICATED NODE.JS WS + PEERJS + MQTT RELAY)
+    // 10. MINI MILITIA HYBRID NETWORK PROTOCOL (P2P + MQTT + NODE.JS WS)
     // =========================================================================
     const PEER_ICE_CONFIG = {
       config: {
@@ -4235,7 +4518,6 @@
       return false;
     }
 
-    // Connects to Dedicated Node.js WebSocket Server (if URL provided or same-origin Node.js server detected)
     function connectNodeJsWsServer(customUrl = null) {
       let url = customUrl ? customUrl.trim() : state.wsServerUrl;
       if (!url && typeof window !== 'undefined' && window.location.protocol.startsWith('http') && !/github\.io|googleusercontent\.com/i.test(window.location.hostname)) {
@@ -4253,6 +4535,7 @@
         ws.onopen = () => {
           state.wsConnected = true;
           state.wsServerUrl = url;
+          state.netActiveProto = 'WS';
           const dot = document.getElementById('wsServerDot');
           const btn = document.getElementById('btnConnectWsServer');
           if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0';
@@ -4260,10 +4543,12 @@
           if (state.roomCode) {
             ws.send(JSON.stringify({ type: 'ws_subscribe_room', roomCode: state.roomCode, playerId: state.tourney.myId }));
           }
+          updatePingDisplays();
         };
         ws.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data);
+            msg._viaProto = 'WS';
             handleIncomingNetworkMessage(msg, null);
           } catch (e) {}
         };
@@ -4273,6 +4558,7 @@
           const btn = document.getElementById('btnConnectWsServer');
           if (dot) dot.className = 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
           if (btn) btn.textContent = 'LINK WS';
+          updatePingDisplays();
         };
       } catch (e) {}
     }
@@ -4314,6 +4600,8 @@
             }
             connected = true;
             mqttClient = client;
+            if (!state.wsConnected) state.netActiveProto = 'MQTT';
+            updatePingDisplays();
             client.subscribe(mqttTopic, { qos: 0 }, () => {
               if (onOpenCallback) onOpenCallback();
             });
@@ -4322,6 +4610,7 @@
             if (topic !== mqttTopic) return;
             try {
               const msg = JSON.parse(payload.toString());
+              msg._viaProto = 'MQTT';
               handleIncomingNetworkMessage(msg, null);
             } catch (e) {}
           });
@@ -4336,34 +4625,47 @@
     }
 
     function sendViaCloudRelay(data) {
-      // 1. Send via Dedicated Node.js WebSocket Server if connected
-      if (state.wsClient && state.wsConnected && state.wsClient.readyState === WebSocket.OPEN) {
+      const pref = state.netProtocolPref || 'auto';
+      const useWs = (pref === 'auto' || pref === 'ws') && state.wsClient && state.wsConnected && state.wsClient.readyState === WebSocket.OPEN;
+      const useMqtt = (pref === 'auto' || pref === 'mqtt' || (!useWs && pref === 'ws')) && mqttClient && mqttClient.connected && mqttTopic;
+
+      if (useWs) {
         try {
           state.wsClient.send(JSON.stringify(data));
         } catch (e) {}
       }
-      // 2. Send via Serverless Cloud MQTT Relay
-      if (mqttClient && mqttClient.connected && mqttTopic) {
+      if (useMqtt) {
         try {
           mqttClient.publish(mqttTopic, JSON.stringify(data), { qos: 0 });
         } catch (e) {}
       }
     }
 
-    function broadcastMatchEvent(pkt) {
-      tagPacket(pkt);
-      sendViaCloudRelay(pkt);
+    function sendViaPeerJs(pkt, targetPlayerId = null) {
+      const pref = state.netProtocolPref || 'auto';
+      if (pref !== 'auto' && pref !== 'p2p') return;
       if (state.mode === 'online') {
         if (state.conn && state.conn.open) {
           try { state.conn.send(pkt); } catch (e) {}
         }
       } else if (state.onlineRole === 'host') {
-        Object.values(state.tourney.hostConns).forEach(c => {
+        if (targetPlayerId) {
+          const c = state.tourney.hostConns[targetPlayerId];
           if (c && c.open) { try { c.send(pkt); } catch (e) {} }
-        });
+        } else {
+          Object.values(state.tourney.hostConns).forEach(c => {
+            if (c && c.open) { try { c.send(pkt); } catch (e) {} }
+          });
+        }
       } else if (state.conn && state.conn.open) {
         try { state.conn.send(pkt); } catch (e) {}
       }
+    }
+
+    function broadcastMatchEvent(pkt) {
+      tagPacket(pkt);
+      sendViaCloudRelay(pkt);
+      sendViaPeerJs(pkt, null);
     }
 
     function sendOnlinePacket(data) {
@@ -4374,25 +4676,56 @@
       const expectedMatchId = state.mode === 'online' ? 'duel' : state.tourney.currentMatchId;
       if (!msg || msg.matchId !== expectedMatchId || state.vsSplashActive) return;
 
+      if (msg.type === 'round_event') {
+        if (!isLocalMatchArbiter()) {
+          if (msg.roundWinners && typeof msg.roundWinners === 'object') {
+            state.roundWinners = { ...state.roundWinners, ...msg.roundWinners };
+            recomputeRoundWinsFromLedger();
+          }
+          if (msg.event === 'round_end') {
+            if (typeof msg.roundNumber === 'number' && msg.roundNumber !== state.roundNumber) return;
+            if (!state.roundSettled) {
+              finishRound(msg.winnerWho, msg.reason || 'K.O.!', true, msg.roundNumber);
+            }
+          } else if (msg.event === 'round_start') {
+            if (typeof msg.roundNumber === 'number' && msg.roundNumber > state.roundNumber) {
+              state.roundNumber = msg.roundNumber;
+              startRound();
+            }
+          }
+        }
+        return;
+      }
+
+      if (typeof msg.roundNumber === 'number' && msg.roundNumber !== state.roundNumber) return;
+
+      if (msg.type === 'mm_input') {
+        const mySlot = getLocalControlledSlot();
+        if (mySlot === msg.who) return;
+        const targetKeys = msg.who === 'p1' ? state.p1Keys : state.p2Keys;
+        const actor = msg.who === 'p1' ? state.p1 : state.p2;
+        targetKeys.left = !!msg.l;
+        targetKeys.right = !!msg.r;
+        targetKeys.down = !!msg.d;
+        if (Number.isFinite(msg.x) && Math.abs(actor.x - msg.x) > 16) {
+          actor.x = actor.x * 0.4 + msg.x * 0.6;
+        }
+        return;
+      }
+
       if (msg.type === 'cmd') {
         const mySlot = getLocalControlledSlot();
-        if (mySlot === msg.who) return; // Ignore echo of our own fighter slot
+        if (mySlot === msg.who) return;
         const actor = msg.who === 'p1' ? state.p1 : state.p2;
-
-        if (typeof msg.x === 'number' && Math.abs(actor.x - msg.x) > 16) {
-          actor.x = actor.x * 0.35 + msg.x * 0.65;
+        if (Number.isFinite(msg.x) && Math.abs(actor.x - msg.x) > 16) {
+          actor.x = actor.x * 0.4 + msg.x * 0.6;
         }
-        if (typeof msg.y === 'number' && Math.abs(actor.y - msg.y) > 20) {
+        if (Number.isFinite(msg.y) && Math.abs(actor.y - msg.y) > 20) {
           actor.y = msg.y;
         }
-
-        if (msg.act === 'move') {
-          actor.moveDir = msg.moveDir || 0;
-          actor.crouching = !!msg.crouching;
-          stepFighterMovementIntent(msg.who);
-        } else {
-          if (typeof msg.moveDir === 'number') actor.moveDir = msg.moveDir;
-          performFighterAction(msg.who, msg.act, true);
+        performFighterAction(msg.who, msg.act, true);
+        if (msg.act === 'jump' && Number.isFinite(msg.vx)) {
+          actor.vx = msg.vx;
         }
         return;
       }
@@ -4404,37 +4737,33 @@
         return;
       }
 
-      if (msg.type === 'round_event') {
-        if (!isLocalMatchArbiter()) {
-          state.p1Wins = msg.p1Wins;
-          state.p2Wins = msg.p2Wins;
-          if (msg.event === 'round_end' && !state.roundSettled) {
-            finishRound(msg.winnerWho, msg.reason || 'K.O.!', true);
-          }
-        }
-        return;
-      }
-
-      if (msg.type === 'sync_pos') {
+      if (msg.type === 'mm_snap') {
         if (!isLocalMatchArbiter() && !state.roundSettled) {
+          if (typeof msg.s === 'number' && msg.s < state.tourney.lastAppliedSnapSeq) return;
+          if (typeof msg.s === 'number') state.tourney.lastAppliedSnapSeq = msg.s;
+
           const mySlot = getLocalControlledSlot();
-          if (mySlot !== 'p1') {
-            state.p1.moveDir = msg.p1Move || 0;
-            state.p1.crouching = !!msg.p1Crouch;
+          if (mySlot !== 'p1' && typeof msg.k1 === 'number') {
+            state.p1Keys.left = !!(msg.k1 & 1);
+            state.p1Keys.right = !!(msg.k1 & 2);
+            state.p1Keys.down = !!(msg.k1 & 4);
           }
-          if (mySlot !== 'p2') {
-            state.p2.moveDir = msg.p2Move || 0;
-            state.p2.crouching = !!msg.p2Crouch;
+          if (mySlot !== 'p2' && typeof msg.k2 === 'number') {
+            state.p2Keys.left = !!(msg.k2 & 1);
+            state.p2Keys.right = !!(msg.k2 & 2);
+            state.p2Keys.down = !!(msg.k2 & 4);
           }
-          if (Math.abs(state.p1.x - msg.p1X) > 24) state.p1.x = state.p1.x * 0.5 + msg.p1X * 0.5;
-          if (Math.abs(state.p2.x - msg.p2X) > 24) state.p2.x = state.p2.x * 0.5 + msg.p2X * 0.5;
-          state.p1.hp = msg.p1Hp;
-          state.p2.hp = msg.p2Hp;
-          state.p1.meter = msg.p1Meter;
-          state.p2.meter = msg.p2Meter;
-          state.p1Wins = msg.p1Wins;
-          state.p2Wins = msg.p2Wins;
-          state.timer = msg.timer;
+          if (Number.isFinite(msg.x1) && Math.abs(state.p1.x - msg.x1) > 18) {
+            state.p1.x = state.p1.x * 0.45 + msg.x1 * 0.55;
+          }
+          if (Number.isFinite(msg.x2) && Math.abs(state.p2.x - msg.x2) > 18) {
+            state.p2.x = state.p2.x * 0.45 + msg.x2 * 0.55;
+          }
+          if (Number.isFinite(msg.hp1)) state.p1.hp = msg.hp1;
+          if (Number.isFinite(msg.hp2)) state.p2.hp = msg.hp2;
+          if (Number.isFinite(msg.m1)) state.p1.meter = msg.m1;
+          if (Number.isFinite(msg.m2)) state.p2.meter = msg.m2;
+          if (Number.isFinite(msg.t)) state.timer = msg.t;
           updateArenaHUD();
         }
         return;
@@ -4442,7 +4771,7 @@
     }
 
     function handleIncomingDuelMessage(msg) {
-      if (['cmd', 'hit_event', 'round_event', 'sync_pos'].includes(msg.type)) {
+      if (['mm_input', 'cmd', 'hit_event', 'round_event', 'mm_snap'].includes(msg.type)) {
         handleIncomingCombatSyncPacket(msg);
         return;
       }
@@ -4481,8 +4810,42 @@
       if (isDuplicatePacket(msg)) return;
       if (msg._targetId && msg._targetId !== state.tourney.myId) return;
 
-      if (['cmd', 'hit_event', 'round_event', 'sync_pos'].includes(msg.type)) {
-        // If Host receives a PeerJS combat packet, relay to other PeerJS guests
+      const viaProto = conn ? 'P2P' : (msg._viaProto || 'MQTT');
+
+      if (msg.type === 'net_ping') {
+        const pongPkt = {
+          type: 'net_pong',
+          t0: msg.t0,
+          _targetId: msg._senderId,
+          proto: viaProto
+        };
+        tagPacket(pongPkt);
+        if (conn && conn.open) {
+          try { conn.send(pongPkt); } catch (e) {}
+        } else {
+          sendViaCloudRelay(pongPkt);
+        }
+        return;
+      }
+
+      if (msg.type === 'net_pong') {
+        const rtt = Math.max(1, Date.now() - (msg.t0 || Date.now()));
+        state.netPingMs = state.netPingMs === null ? rtt : Math.round(state.netPingMs * 0.55 + rtt * 0.45);
+        state.netActiveProto = msg.proto || viaProto;
+        updatePingDisplays();
+        return;
+      }
+
+      const senderId = msg.id || msg._senderId;
+      if (senderId) {
+        const pObj = state.tourney.players.find(p => p.id === senderId);
+        if (pObj) pObj.lastSeen = Date.now();
+        if (senderId === state.tourney.hostId || msg.type === 'tourney_state') {
+          state.tourney.lastHostBeaconAt = Date.now();
+        }
+      }
+
+      if (['mm_input', 'cmd', 'hit_event', 'round_event', 'mm_snap'].includes(msg.type)) {
         if (state.onlineRole === 'host' && conn) {
           Object.entries(state.tourney.hostConns).forEach(([pid, c]) => {
             if (pid !== msg._senderId && c && c.open) {
@@ -4499,6 +4862,33 @@
         return;
       }
 
+      if (msg.type === 'tourney_leave') {
+        if (msg.id === state.tourney.hostId || msg.wasHost) {
+          triggerHostSuccessionIfNeeded(msg.id, 'left the room');
+          return;
+        }
+      }
+
+      if (msg.type === 'tourney_host_migrated') {
+        state.tourney.hostId = msg.newHostId;
+        state.tourney.lastHostBeaconAt = Date.now();
+        if (msg.players) state.tourney.players = msg.players;
+        if (msg.newHostId === state.tourney.myId) {
+          state.onlineRole = 'host';
+        } else if (state.onlineRole === 'host') {
+          state.onlineRole = 'guest';
+        }
+        document.getElementById('onlineStatusText').textContent = `👑 ${msg.newHostNick} is now Room Host!`;
+        renderTournamentLobbyUI();
+        renderArenaTournamentHUD();
+        return;
+      }
+
+      if (msg.type === 'tourney_reset_lobby') {
+        applyRoomReturnToLobby(msg.byNick || 'Player', false);
+        return;
+      }
+
       if (state.onlineRole === 'host') {
         handleHostIncomingTourneyMsg(msg, conn);
       } else if (state.onlineRole === 'guest') {
@@ -4509,6 +4899,8 @@
     function bindOnlineConnection(conn) {
       state.conn = conn;
       conn.on('open', () => {
+        state.netActiveProto = 'P2P';
+        updatePingDisplays();
         if (state.onlineRole === 'guest') {
           sendOnlinePacket({ type: 'duel_join' });
         } else {
@@ -4525,10 +4917,10 @@
     }
 
     // =========================================================================
-    // 10B. SEQUENTIAL ONE-BY-ONE 10-PLAYER TOURNAMENT ENGINE (CLASSIC ARCADE)
+    // 10B. MINI MILITIA HOSTLESS / AUTO-MIGRATING TOURNAMENT ENGINE
     // =========================================================================
     const MAX_TOURNEY_PLAYERS = 10;
-    const TOURNEY_ROUND_MAX_SEC = 120;
+    const TOURNEY_ROUND_MAX_SEC = 240;
     const BOT_NICKNAMES = ['CYBER_RAJ', 'THAKUR_X', 'BIHAR_BOSS', 'NIGHT_KING', 'DBH_LEGEND', 'CHOR_DON', 'IRON_BABA', 'NEON_MONK', 'SADAK_HERO'];
     let hostWatchdogInterval = null;
     let guestHeartbeatInterval = null;
@@ -4536,6 +4928,149 @@
     let wizardPendingAction = null;
     let lastShownVsKey = '';
     let vsSplashTimeout = null;
+
+    function triggerHostSuccessionIfNeeded(departedHostId, reason = 'left the room') {
+      if (!state.roomCode) return;
+      const oldHostObj = state.tourney.players.find(p => p.id === departedHostId);
+      const oldHostNick = oldHostObj ? oldHostObj.nickname : 'Previous Host';
+
+      state.tourney.players = state.tourney.players.filter(p => p.id !== departedHostId);
+
+      const remainingHumans = state.tourney.players
+        .filter(p => !p.isBot)
+        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+
+      if (remainingHumans.length === 0) return;
+
+      const nextHost = remainingHumans[0];
+      state.tourney.hostId = nextHost.id;
+      state.tourney.lastHostBeaconAt = Date.now();
+
+      if (nextHost.id === state.tourney.myId) {
+        state.onlineRole = 'host';
+        state.tourney.active = true;
+        sfx.confirm();
+        document.getElementById('onlineStatusText').textContent = `👑 ${oldHostNick} ${reason} — You (${nextHost.nickname}) are now Room Host!`;
+
+        if (typeof Peer !== 'undefined' && state.roomCode) {
+          try { if (state.peer) state.peer.destroy(); } catch (e) {}
+          try {
+            state.peer = new Peer('tekkaro-room-' + state.roomCode, PEER_ICE_CONFIG);
+            state.peer.on('connection', c => bindHostTourneyGuestConnection(c));
+            state.peer.on('error', () => {});
+          } catch (e) {}
+        }
+
+        if (state.tourney.phase === 'active') {
+          const activeMatch = state.tourney.matches.find(
+            m => m.status === 'fighting' && (m.p1Id === departedHostId || m.p2Id === departedHostId)
+          );
+          state.tourney.matches.forEach(qm => {
+            if (qm.status === 'queued' && (qm.p1Id === departedHostId || qm.p2Id === departedHostId)) {
+              const oppId = qm.p1Id === departedHostId ? qm.p2Id : qm.p1Id;
+              qm.status = 'finished';
+              qm.winnerId = oppId;
+              qm.loserId = departedHostId;
+              const oppP = state.tourney.players.find(x => x.id === oppId);
+              if (oppP) {
+                oppP.status = 'advanced';
+                oppP.wins = (oppP.wins || 0) + 1;
+              }
+            }
+          });
+          if (activeMatch) {
+            const winId = activeMatch.p1Id === departedHostId ? activeMatch.p2Id : activeMatch.p1Id;
+            processHostMatchFinished(activeMatch.id, winId, departedHostId, 2, 0, true);
+          } else {
+            checkSequentialQueueOrRoundOnHost();
+          }
+        } else if (state.tourney.phase === 'lobby') {
+          generateHostLobbyMatchOrderPreview(false);
+        }
+
+        sendTourneyPacketFromHost({
+          type: 'tourney_host_migrated',
+          oldHostId: departedHostId,
+          newHostId: nextHost.id,
+          newHostNick: nextHost.nickname,
+          players: state.tourney.players
+        }, null);
+        broadcastHostTourneyState();
+      } else {
+        document.getElementById('onlineStatusText').textContent = `👑 ${oldHostNick} ${reason} — ${nextHost.nickname} is now Room Host!`;
+      }
+
+      renderTournamentLobbyUI();
+      renderArenaTournamentHUD();
+    }
+
+    function applyRoomReturnToLobby(triggeredByNick = 'Player', shouldBroadcast = false) {
+      state.tourney.phase = 'lobby';
+      state.tourney.roundNum = 1;
+      state.tourney.matches = [];
+      state.tourney.currentMatchId = null;
+      state.tourney.myMatchRole = null;
+      state.tourney.players.forEach(p => {
+        p.status = 'lobby';
+        p.ready = p.isBot ? true : false;
+        p.byeCount = 0;
+        p.matchesPlayed = 0;
+        p.lastSeen = Date.now();
+      });
+
+      if (state.onlineRole === 'host') {
+        generateHostLobbyMatchOrderPreview(false);
+        if (shouldBroadcast) {
+          broadcastHostTourneyState();
+        }
+      } else if (shouldBroadcast) {
+        broadcastMatchEvent({
+          type: 'tourney_reset_lobby',
+          byId: state.tourney.myId,
+          byNick: triggeredByNick
+        });
+      }
+
+      if (state.tourney.inLobbyView) {
+        document.getElementById('modalTourneyChampion')?.classList.add('hidden');
+        document.getElementById('modalTourneyVsSplash')?.classList.add('hidden');
+        state.roundLive = false;
+        showScreen('home');
+        document.getElementById('modalOnlineLobby').classList.remove('hidden');
+      }
+      renderTournamentLobbyUI();
+    }
+
+    function leaveOnlineRoomCleanly() {
+      if (!state.roomCode) return;
+      const wasHost = state.onlineRole === 'host';
+      const pkt = {
+        type: 'tourney_leave',
+        id: state.tourney.myId,
+        wasHost
+      };
+      tagPacket(pkt);
+      sendViaCloudRelay(pkt);
+      sendViaPeerJs(pkt, null);
+
+      if (joinRetryTimer) { clearInterval(joinRetryTimer); joinRetryTimer = null; }
+      if (matchFinishRetryTimer) { clearInterval(matchFinishRetryTimer); matchFinishRetryTimer = null; }
+      if (mqttClient) { try { mqttClient.end(true); } catch (e) {} mqttClient = null; }
+      if (state.peer) { try { state.peer.destroy(); } catch (e) {} state.peer = null; }
+      state.roomCode = '';
+      state.onlineRole = null;
+      state.netPingMs = null;
+      state.tourney.active = false;
+      state.tourney.hostId = null;
+      resetLocalTournamentLobby();
+      document.getElementById('onlineRoomCodeDisplay').textContent = '------';
+      document.getElementById('btnCopyRoomCode')?.classList.add('hidden');
+      document.getElementById('btnLeaveRoom')?.classList.add('hidden');
+      const joinBtn = document.getElementById('btnJoinRoom');
+      if (joinBtn) joinBtn.textContent = 'JOIN';
+      document.getElementById('onlineStatusText').textContent = 'Left the room. Host a new room or enter a code to join!';
+      updatePingDisplays();
+    }
 
     function openTourneyOnboardingWizard(actionType = 'edit') {
       wizardPendingAction = actionType;
@@ -4616,13 +5151,46 @@
         });
       }
 
+      const protoSel = document.getElementById('selectNetProtocol');
+      if (protoSel) {
+        protoSel.addEventListener('change', () => {
+          state.netProtocolPref = protoSel.value || 'auto';
+          sfx.click();
+          if (state.netProtocolPref === 'ws' && !state.wsConnected) {
+            const url = document.getElementById('inputWsServerUrl')?.value || '';
+            connectNodeJsWsServer(url);
+          }
+          updatePingDisplays();
+        });
+      }
+
       document.getElementById('btnConnectWsServer')?.addEventListener('click', () => {
         sfx.click();
         const url = document.getElementById('inputWsServerUrl')?.value || '';
         connectNodeJsWsServer(url);
       });
 
-      // Auto-probe for same-origin Node.js WebSocket server if hosted on Node
+      document.getElementById('btnLeaveRoom')?.addEventListener('click', () => {
+        sfx.click();
+        leaveOnlineRoomCleanly();
+      });
+
+      document.getElementById('btnTogglePingHud')?.addEventListener('click', () => {
+        sfx.click();
+        state.showPingHud = !state.showPingHud;
+        updatePingDisplays();
+      });
+
+      document.getElementById('netPingCornerBadge')?.addEventListener('click', () => {
+        sfx.click();
+        const order = ['auto', 'mqtt', 'p2p', 'ws'];
+        const nextIdx = (order.indexOf(state.netProtocolPref) + 1) % order.length;
+        state.netProtocolPref = order[nextIdx];
+        const selEl = document.getElementById('selectNetProtocol');
+        if (selEl) selEl.value = state.netProtocolPref;
+        updatePingDisplays();
+      });
+
       connectNodeJsWsServer();
 
       document.getElementById('btnOpenProfileWizard')?.addEventListener('click', () => {
@@ -4752,7 +5320,7 @@
       if (btnAddBot) {
         btnAddBot.addEventListener('click', () => {
           if (state.onlineRole === 'guest') {
-            document.getElementById('onlineStatusText').textContent = 'Only the Room Host can add AI Bots!';
+            document.getElementById('onlineStatusText').textContent = 'Only the current Room Host can add AI Bots!';
             return;
           }
           if (state.tourney.players.length >= MAX_TOURNEY_PLAYERS) {
@@ -4771,6 +5339,7 @@
             fighterIdx: botFighter,
             ready: true,
             isBot: true,
+            joinedAt: Date.now(),
             status: 'lobby',
             wins: 0,
             grudgeWins: 0,
@@ -4778,7 +5347,7 @@
             matchesPlayed: 0,
             lastSeen: Date.now()
           });
-          document.getElementById('onlineStatusText').textContent = `Added ${botNick} (${state.tourney.players.length}/10)! Check Match Order below, then Host clicks ⚡ START TOURNAMENT.`;
+          document.getElementById('onlineStatusText').textContent = `Added ${botNick} (${state.tourney.players.length}/10)! Check Match Order below, then click ⚡ START TOURNAMENT.`;
           generateHostLobbyMatchOrderPreview(false);
           broadcastHostTourneyState();
           renderTournamentLobbyUI();
@@ -4789,7 +5358,13 @@
       if (btnStartNow) {
         btnStartNow.addEventListener('click', () => {
           if (state.onlineRole === 'guest') {
-            document.getElementById('onlineStatusText').textContent = 'Only the Room Host can start the tournament!';
+            const allHumansReady = state.tourney.players.filter(p => !p.isBot).every(p => p.ready);
+            if (allHumansReady && state.tourney.players.length >= 2) {
+              sendTourneyPacketToHost({ type: 'tourney_request_start', byId: state.tourney.myId });
+              document.getElementById('onlineStatusText').textContent = 'Launching tournament...';
+              return;
+            }
+            document.getElementById('onlineStatusText').textContent = 'Wait for the Room Host (👑) or have everyone press READY!';
             return;
           }
           if (state.tourney.players.length < 2) {
@@ -4799,6 +5374,7 @@
           sfx.confirm();
           state.onlineRole = 'host';
           state.tourney.active = true;
+          state.tourney.inLobbyView = false;
 
           state.tourney.players.forEach(p => {
             p.status = 'lobby';
@@ -4844,23 +5420,12 @@
 
       const returnToTourneyRoomLobby = () => {
         sfx.click();
+        state.tourney.inLobbyView = true;
         document.getElementById('modalTourneyChampion').classList.add('hidden');
         document.getElementById('modalTourneyVsSplash').classList.add('hidden');
-        if (state.onlineRole === 'host') {
-          state.tourney.phase = 'lobby';
-          state.tourney.roundNum = 1;
-          state.tourney.matches = [];
-          state.tourney.currentMatchId = null;
-          state.tourney.myMatchRole = null;
-          state.tourney.players.forEach(p => {
-            p.status = 'lobby';
-            p.ready = p.isBot ? true : false;
-            p.byeCount = 0;
-            p.matchesPlayed = 0;
-            p.lastSeen = Date.now();
-          });
-          generateHostLobbyMatchOrderPreview(false);
-          broadcastHostTourneyState();
+
+        if (state.tourney.phase === 'champion') {
+          applyRoomReturnToLobby(state.tourney.myNickname, true);
         } else if (state.onlineRole === 'guest') {
           sendTourneyPacketToHost({
             type: 'tourney_UpdatePlayer',
@@ -4870,11 +5435,11 @@
             ready: false
           });
         }
+
         state.roundLive = false;
         showScreen('home');
         document.getElementById('modalOnlineLobby').classList.remove('hidden');
         renderTournamentLobbyUI();
-        openTourneyOnboardingWizard('edit');
       };
 
       document.getElementById('btnTourneyBackLobby')?.addEventListener('click', returnToTourneyRoomLobby);
@@ -4883,7 +5448,7 @@
       document.getElementById('btnTourneyExitHome')?.addEventListener('click', () => {
         document.getElementById('modalTourneyChampion').classList.add('hidden');
         document.getElementById('modalTourneyVsSplash').classList.add('hidden');
-        state.tourney.active = false;
+        leaveOnlineRoomCleanly();
         showScreen('home');
       });
 
@@ -4902,25 +5467,53 @@
         }
       });
 
-      window.addEventListener('beforeunload', () => {
-        if (state.tourney.active && state.onlineRole === 'guest') {
-          sendTourneyPacketToHost({ type: 'tourney_leave', id: state.tourney.myId });
+      const handlePageUnload = () => {
+        if (state.roomCode) {
+          const pkt = {
+            type: 'tourney_leave',
+            id: state.tourney.myId,
+            wasHost: state.onlineRole === 'host'
+          };
+          tagPacket(pkt);
+          sendViaCloudRelay(pkt);
+          sendViaPeerJs(pkt, null);
         }
-      });
+      };
+      window.addEventListener('beforeunload', handlePageUnload);
+      window.addEventListener('pagehide', handlePageUnload);
     }
 
     function startTournamentHeartbeatsAndWatchdog() {
       if (guestHeartbeatInterval) clearInterval(guestHeartbeatInterval);
       guestHeartbeatInterval = setInterval(() => {
-        if (state.onlineRole === 'guest' && state.roomCode) {
+        if (!state.roomCode) return;
+
+        const pingPkt = {
+          type: 'net_ping',
+          t0: Date.now()
+        };
+        tagPacket(pingPkt);
+        sendViaCloudRelay(pingPkt);
+        sendViaPeerJs(pingPkt, null);
+
+        if (state.onlineRole === 'guest') {
           sendTourneyPacketToHost({
             type: 'tourney_heartbeat',
             id: state.tourney.myId,
             requestState: state.tourney.phase === 'lobby',
             matchId: state.tourney.currentMatchId
           });
+
+          if (state.tourney.active && state.tourney.hostId && state.tourney.hostId !== state.tourney.myId && state.tourney.lastHostBeaconAt > 0) {
+            const silenceMs = Date.now() - state.tourney.lastHostBeaconAt;
+            if (silenceMs > 6000) {
+              triggerHostSuccessionIfNeeded(state.tourney.hostId, 'went offline');
+            }
+          }
+        } else if (state.onlineRole === 'host' && state.tourney.active) {
+          broadcastHostTourneyState();
         }
-      }, 2500);
+      }, 2200);
 
       if (hostWatchdogInterval) clearInterval(hostWatchdogInterval);
       hostWatchdogInterval = setInterval(() => {
@@ -4932,7 +5525,7 @@
           if (activeM) {
             [activeM.p1Id, activeM.p2Id].forEach(pid => {
               const p = state.tourney.players.find(x => x.id === pid);
-              if (p && !p.isBot && p.id !== state.tourney.myId && p.lastSeen && (now - p.lastSeen > 30000)) {
+              if (p && !p.isBot && p.id !== state.tourney.myId && p.lastSeen && (now - p.lastSeen > 25000)) {
                 handleHostPlayerDisconnected(p.id, 'timed out');
               }
             });
@@ -5028,6 +5621,10 @@
       const fIdx = parseInt(document.getElementById('selectOnlineFighter')?.value || '0', 10) || 0;
       state.tourney.myNickname = nick;
       state.tourney.myFighterIdx = fIdx;
+      state.tourney.myJoinedAt = Date.now();
+      state.tourney.hostId = state.tourney.myId;
+      state.tourney.lastHostBeaconAt = Date.now();
+      state.tourney.inLobbyView = true;
       state.tourney.phase = 'lobby';
       state.tourney.roundNum = 1;
       state.tourney.roundTimeLeft = TOURNEY_ROUND_MAX_SEC;
@@ -5039,6 +5636,7 @@
         fighterIdx: fIdx,
         ready: false,
         isBot: false,
+        joinedAt: state.tourney.myJoinedAt,
         status: 'lobby',
         wins: 0,
         grudgeWins: 0,
@@ -5082,7 +5680,7 @@
           const playedDiff = (a.matchesPlayed || 0) - (b.matchesPlayed || 0);
           if (playedDiff !== 0) return playedDiff;
           if (!!a.isBot !== !!b.isBot) return a.isBot ? 1 : -1;
-          return 0;
+          return (a.joinedAt || 0) - (b.joinedAt || 0);
         });
       }
 
@@ -5151,35 +5749,25 @@
     function sendTourneyPacketToHost(packet) {
       tagPacket(packet);
       sendViaCloudRelay(packet);
-      if (state.conn && state.conn.open) {
-        try { state.conn.send(packet); } catch (e) {}
-      }
+      sendViaPeerJs(packet, null);
     }
 
     function sendTourneyPacketFromHost(packet, targetPlayerId = null) {
       if (targetPlayerId) packet._targetId = targetPlayerId;
       tagPacket(packet);
       sendViaCloudRelay(packet);
-      if (targetPlayerId) {
-        const c = state.tourney.hostConns[targetPlayerId];
-        if (c && c.open) {
-          try { c.send(packet); } catch (e) {}
-        }
-      } else {
-        Object.values(state.tourney.hostConns).forEach(c => {
-          if (c && c.open) {
-            try { c.send(packet); } catch (e) {}
-          }
-        });
-      }
+      sendViaPeerJs(packet, targetPlayerId);
     }
 
     function broadcastHostTourneyState() {
       if (state.onlineRole !== 'host') return;
       state.tourney.stateSeq = (state.tourney.stateSeq || 1) + 1;
+      state.tourney.hostId = state.tourney.myId;
+      state.tourney.lastHostBeaconAt = Date.now();
       const payload = {
         type: 'tourney_state',
         stateSeq: state.tourney.stateSeq,
+        hostId: state.tourney.myId,
         phase: state.tourney.phase,
         roundNum: state.tourney.roundNum,
         roundTimeLeft: state.tourney.roundTimeLeft || TOURNEY_ROUND_MAX_SEC,
@@ -5213,6 +5801,13 @@
         handleHostPlayerDisconnected(msg.id, 'left the tournament');
         return;
       }
+      if (msg.type === 'tourney_request_start') {
+        if (state.tourney.phase === 'lobby' && state.tourney.players.length >= 2) {
+          state.tourney.inLobbyView = false;
+          hostStartTournamentNow();
+        }
+        return;
+      }
 
       if (msg.type === 'tourney_join') {
         const isExisting = state.tourney.players.some(p => p.id === msg.id);
@@ -5232,6 +5827,7 @@
             fighterIdx: msg.fighterIdx || 0,
             ready: !!msg.ready,
             isBot: false,
+            joinedAt: msg.joinedAt || Date.now(),
             status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
             wins: 0,
             grudgeWins: 0,
@@ -5261,6 +5857,7 @@
             fighterIdx: msg.fighterIdx || 0,
             ready: !!msg.ready,
             isBot: false,
+            joinedAt: Date.now(),
             status: state.tourney.phase === 'active' ? 'eliminated' : 'lobby',
             wins: 0,
             grudgeWins: 0,
@@ -5315,6 +5912,14 @@
       }
       if (msg.type === 'tourney_state') {
         state.tourney.active = true;
+        state.tourney.lastHostBeaconAt = Date.now();
+        if (msg.hostId) {
+          state.tourney.hostId = msg.hostId;
+          if (msg.hostId === state.tourney.myId) {
+            state.onlineRole = 'host';
+          }
+        }
+
         const amIInRoom = (msg.players || []).some(p => p.id === state.tourney.myId);
         if (amIInRoom) {
           if (joinRetryTimer) {
@@ -5324,6 +5929,7 @@
             document.getElementById('onlineStatusText').textContent = `✓ Joined Room ${state.roomCode} (${msg.players.length}/10)! Press READY & check Match Order below.`;
             const joinBtn = document.getElementById('btnJoinRoom');
             if (joinBtn) joinBtn.textContent = '✓ JOINED';
+            document.getElementById('btnLeaveRoom')?.classList.remove('hidden');
           }
         } else {
           sendTourneyPacketToHost({
@@ -5331,9 +5937,22 @@
             id: state.tourney.myId,
             nickname: state.tourney.myNickname,
             fighterIdx: state.tourney.myFighterIdx,
+            joinedAt: state.tourney.myJoinedAt || Date.now(),
             ready: state.tourney.myPendingReady || false
           });
           if (msg.phase === 'lobby') return;
+        }
+
+        if (state.tourney.inLobbyView && msg.phase === 'champion') {
+          state.tourney.players = msg.players || [];
+          renderTournamentLobbyUI();
+          return;
+        }
+
+        if (msg.phase === 'active') {
+          state.tourney.inLobbyView = false;
+        } else if (msg.phase === 'lobby') {
+          state.tourney.inLobbyView = true;
         }
 
         const prevMatchId = state.tourney.currentMatchId;
@@ -5369,6 +5988,8 @@
 
     function bindHostTourneyGuestConnection(conn) {
       conn.on('open', () => {
+        state.netActiveProto = 'P2P';
+        updatePingDisplays();
         broadcastHostTourneyState();
       });
       conn.on('data', msg => handleIncomingNetworkMessage(msg, conn));
@@ -5382,6 +6003,8 @@
     function bindGuestTourneyConnection(conn) {
       state.conn = conn;
       conn.on('open', () => {
+        state.netActiveProto = 'P2P';
+        updatePingDisplays();
         if (state.onlineSubMode === 'duel') {
           sendOnlinePacket({ type: 'duel_join' });
           return;
@@ -5392,10 +6015,20 @@
           id: state.tourney.myId,
           nickname: state.tourney.myNickname,
           fighterIdx: state.tourney.myFighterIdx,
+          joinedAt: state.tourney.myJoinedAt || Date.now(),
           ready: state.tourney.myPendingReady || false
         });
       });
       conn.on('data', msg => handleIncomingNetworkMessage(msg, conn));
+      conn.on('close', () => {
+        if (state.tourney.active && state.tourney.hostId && state.tourney.hostId !== state.tourney.myId) {
+          setTimeout(() => {
+            if (Date.now() - state.tourney.lastHostBeaconAt > 5500) {
+              triggerHostSuccessionIfNeeded(state.tourney.hostId, 'disconnected');
+            }
+          }, 3000);
+        }
+      });
     }
 
     function showIncomingChallengeToast(fromId, fromNick) {
@@ -5406,7 +6039,7 @@
     }
 
     // =========================================================================
-    // SEQUENTIAL ONE-BY-ONE TOURNAMENT QUEUE CONTROLLER (HOST AUTHORITATIVE)
+    // SEQUENTIAL ONE-BY-ONE TOURNAMENT QUEUE CONTROLLER
     // =========================================================================
     function hostStartTournamentNow() {
       if (state.onlineRole !== 'host') return;
@@ -5417,6 +6050,7 @@
       }
 
       state.tourney.phase = 'active';
+      state.tourney.inLobbyView = false;
       state.tourney.roundNum = 1;
       state.tourney.championId = null;
       state.tourney.currentMatchId = null;
@@ -5633,7 +6267,7 @@
     function syncLocalPlayerWithTourneyState(prevMatchId) {
       if (!state.tourney.active) return;
 
-      if (state.tourney.phase === 'lobby') {
+      if (state.tourney.phase === 'lobby' || (state.tourney.inLobbyView && state.tourney.phase === 'champion')) {
         state.roundLive = false;
         state.vsSplashActive = false;
         document.getElementById('modalTourneyVsSplash')?.classList.add('hidden');
@@ -5662,7 +6296,7 @@
         const champFighter = FIGHTERS[state.tourney.championFighterIdx || 0] || FIGHTERS[0];
         document.getElementById('tourneyChampImg').src = champFighter.faceImg;
         document.getElementById('tourneyChampNick').textContent = `${state.tourney.championNick} WINS THE TOURNAMENT!`;
-        document.getElementById('tourneyChampSub').textContent = `Champion Fighter: ${champFighter.name} • Click TOURNAMENT LOBBY below to change character/name & start a new tournament!`;
+        document.getElementById('tourneyChampSub').textContent = `Champion Fighter: ${champFighter.name} • Tap TOURNAMENT LOBBY below anytime (no need to wait for Host)!`;
         document.getElementById('modalTourneyChampion').classList.remove('hidden');
         if (state.tourney._announcedChamp !== state.tourney.championId) {
           state.tourney._announcedChamp = state.tourney.championId;
@@ -5919,6 +6553,7 @@
       if (!grid) return;
 
       updateLobbyProfileSummaryCard();
+      updatePingDisplays();
 
       const players = state.tourney.players;
       const readyCount = players.filter(p => p.ready).length;
@@ -5926,10 +6561,11 @@
       document.getElementById('tourneyReadyCountBadge').textContent = `READY: ${readyCount} / ${players.length}`;
 
       const isGuest = state.onlineRole === 'guest';
+      const allHumansReady = players.filter(p => !p.isBot).every(p => p.ready) && players.length >= 2;
       const btnStartNow = document.getElementById('btnStartTourneyNow');
       const btnAddBot = document.getElementById('btnAddTourneyBot');
       const btnReshuffle = document.getElementById('btnReshuffleOrder');
-      if (btnStartNow) btnStartNow.classList.toggle('hidden', isGuest);
+      if (btnStartNow) btnStartNow.classList.toggle('hidden', isGuest && !allHumansReady);
       if (btnAddBot) btnAddBot.classList.toggle('hidden', isGuest);
       if (btnReshuffle) btnReshuffle.classList.toggle('hidden', isGuest || players.length < 2);
 
@@ -5937,7 +6573,7 @@
       const btnReady = document.getElementById('btnTourneyReady');
       if (btnReady && me) {
         if (me.ready) {
-          btnReady.textContent = isGuest ? '✓ READY (WAIT FOR HOST)' : '✓ READY';
+          btnReady.textContent = '✓ READY';
           btnReady.className = 'arcade-btn px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-arcade font-black text-[9px] sm:text-[10px] uppercase shadow-md';
         } else {
           btnReady.textContent = '✋ PRESS READY';
@@ -5945,9 +6581,11 @@
         }
       }
 
+      const currentHostId = state.tourney.hostId || (players[0] && players[0].id);
       grid.innerHTML = players.map((p, idx) => {
         const f = FIGHTERS[p.fighterIdx || 0] || FIGHTERS[0];
         const isMe = p.id === state.tourney.myId;
+        const isRoomHost = p.id === currentHostId;
         const canKick = !isGuest && !isMe;
         const badge = p.ready
           ? '<span class="px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-arcade font-black text-[8px]">READY ✓</span>'
@@ -5956,11 +6594,11 @@
           ? `<button type="button" onclick="hostRemoveTournamentPlayer('${p.id}')" class="px-1.5 py-0.2 rounded bg-rose-600 hover:bg-rose-500 text-white font-arcade font-bold text-[8px] shrink-0" title="Remove player from room">✕ KICK</button>`
           : '';
         return `
-          <div class="flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900 border ${isMe ? 'border-amber-400' : 'border-slate-800'}">
+          <div class="flex items-center gap-1.5 p-1.5 rounded-xl bg-slate-900 border ${isMe ? 'border-amber-400' : (isRoomHost ? 'border-emerald-500/70' : 'border-slate-800')}">
             <img src="${f.faceImg}" alt="${f.name}" class="w-8 h-8 rounded-lg object-cover border border-slate-700 shrink-0" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-1">
-                <span class="font-arcade font-bold text-[9px] sm:text-[10px] text-white truncate">${idx + 1}. ${p.nickname}${isMe ? ' (YOU)' : ''}</span>
+                <span class="font-arcade font-bold text-[9px] sm:text-[10px] text-white truncate">${isRoomHost ? '👑 ' : `${idx + 1}. `}${p.nickname}${isMe ? ' (YOU)' : ''}</span>
                 ${kickBtn}
               </div>
               <div class="flex items-center justify-between gap-1 mt-0.5">
@@ -6042,17 +6680,19 @@
       };
 
       const isHost = state.onlineRole === 'host';
+      const currentHostId = state.tourney.hostId || (players[0] && players[0].id);
       document.getElementById('arenaTourneyPills').innerHTML = players.map(p => {
         const f = FIGHTERS[p.fighterIdx || 0] || FIGHTERS[0];
         const cls = statusColors[p.status] || statusColors.lobby;
         const lbl = statusLabels[p.status] || 'ONLINE';
+        const isRoomHost = p.id === currentHostId;
         const kickMidMatch = (isHost && p.id !== state.tourney.myId)
           ? `<button type="button" onclick="hostRemoveTournamentPlayer('${p.id}')" class="ml-0.5 px-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[7px] font-bold" title="Remove / Forfeit Player">✕</button>`
           : '';
         return `
           <div class="flex items-center gap-1 px-1.5 py-0.2 rounded-full border ${cls} shrink-0 text-[8px] font-arcade leading-tight">
             <img src="${f.faceImg}" class="w-3.5 h-3.5 rounded-full object-cover" />
-            <span class="font-bold">${p.nickname}</span>
+            <span class="font-bold">${isRoomHost ? '👑' : ''}${p.nickname}</span>
             <span class="opacity-80 text-[7px]">${lbl}</span>
             ${kickMidMatch}
           </div>
@@ -6081,7 +6721,7 @@
         } else if (me?.status === 'eliminated') {
           document.getElementById('specDockBadge').textContent = '💀 ELIMINATED';
           document.getElementById('specDockBadge').className = 'px-1.5 py-0.5 rounded bg-rose-600 text-white font-arcade font-black text-[8px]';
-          document.getElementById('specDockSub').textContent = 'Spectating live match • Challenge another loser or return to Room!';
+          document.getElementById('specDockSub').textContent = 'Spectating live match • Challenge another loser or return to Room anytime!';
         } else {
           document.getElementById('specDockBadge').textContent = '🏆 ADVANCING NEXT ROUND';
           document.getElementById('specDockBadge').className = 'px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-arcade font-black text-[8px]';
@@ -6138,6 +6778,21 @@
       }
     }
 
+    function applyTouchPadStyleUI() {
+      const isDpad = state.touchControlStyle === 'dpad';
+      const stickEl = document.getElementById('virtualJoystickZone');
+      const dpadEl = document.getElementById('virtualDpadZone');
+      const btnToggle = document.getElementById('btnToggleTouchPadStyle');
+      if (stickEl) stickEl.classList.toggle('hidden', isDpad);
+      if (dpadEl) {
+        dpadEl.classList.toggle('hidden', !isDpad);
+        dpadEl.classList.toggle('flex', isDpad);
+      }
+      if (btnToggle) {
+        btnToggle.textContent = isDpad ? '✚ D-PAD' : '🕹 STICK';
+      }
+    }
+
     function bindAllEvents() {
       document.getElementById('btnModeCpu').addEventListener('click', () => {
         state.mode = 'cpu';
@@ -6157,6 +6812,7 @@
 
       document.getElementById('btnModeOnline').addEventListener('click', () => {
         state.mode = 'online';
+        state.tourney.inLobbyView = true;
         sfx.click();
         if (state.tourney.players.length === 0) {
           resetLocalTournamentLobby();
@@ -6164,10 +6820,12 @@
           renderTournamentLobbyUI();
         }
         document.getElementById('modalOnlineLobby').classList.remove('hidden');
+        updatePingDisplays();
       });
 
       document.getElementById('btnCloseOnlineModal').addEventListener('click', () => {
         document.getElementById('modalOnlineLobby').classList.add('hidden');
+        updatePingDisplays();
       });
 
       window.executeHostRoomCreateNow = function() {
@@ -6175,17 +6833,18 @@
         const code = generateRoomCode();
         state.roomCode = code;
         state.onlineRole = 'host';
+        state.tourney.myJoinedAt = Date.now();
+        state.tourney.hostId = state.tourney.myId;
+        state.tourney.lastHostBeaconAt = Date.now();
+        state.tourney.inLobbyView = true;
         state.tourney.active = (state.onlineSubMode === 'tournament');
         state.tourney.hostConns = {};
 
-        if (!state.tourney.players.some(p => p.id === state.tourney.myId)) {
-          resetLocalTournamentLobby();
-        } else {
-          syncMyTourneyProfile();
-        }
+        resetLocalTournamentLobby();
 
         document.getElementById('onlineRoomCodeDisplay').textContent = code;
         document.getElementById('btnCopyRoomCode').classList.remove('hidden');
+        document.getElementById('btnLeaveRoom')?.classList.remove('hidden');
         document.getElementById('onlineStatusText').textContent = `Opening Room ${code}...`;
 
         connectRoomCloudRelay(code, () => {
@@ -6209,6 +6868,7 @@
           });
           state.peer.on('error', () => {});
         }
+        updatePingDisplays();
       };
 
       window.executeGuestRoomJoinNow = function() {
@@ -6221,9 +6881,13 @@
         }
         state.roomCode = rawCode;
         state.onlineRole = 'guest';
+        state.tourney.myJoinedAt = Date.now();
+        state.tourney.lastHostBeaconAt = Date.now();
+        state.tourney.inLobbyView = true;
         state.tourney.active = (state.onlineSubMode === 'tournament');
 
         document.getElementById('onlineRoomCodeDisplay').textContent = rawCode;
+        document.getElementById('btnLeaveRoom')?.classList.remove('hidden');
         document.getElementById('onlineStatusText').textContent = `Joining Room ${rawCode} as ${nick}...`;
         const joinBtn = document.getElementById('btnJoinRoom');
         if (joinBtn) joinBtn.textContent = 'JOINING...';
@@ -6237,6 +6901,7 @@
               id: state.tourney.myId,
               nickname: state.tourney.myNickname,
               fighterIdx: state.tourney.myFighterIdx,
+              joinedAt: state.tourney.myJoinedAt,
               ready: state.tourney.myPendingReady || false
             });
           }
@@ -6268,6 +6933,7 @@
           });
           state.peer.on('error', () => {});
         }
+        updatePingDisplays();
       };
 
       document.getElementById('btnCreateRoom').addEventListener('click', () => {
@@ -6352,11 +7018,19 @@
       document.getElementById('btnOpenPauseModal').addEventListener('click', () => togglePauseMenu(true));
       document.getElementById('btnQuickHome').addEventListener('click', () => {
         state.roundLive = false;
+        if (state.roomCode && state.tourney.active) {
+          leaveOnlineRoomCleanly();
+        }
         showScreen('home');
       });
-      document.getElementById('btnPauseToSelect').addEventListener('click', () => {
+      document.getElementById('btnPauseToSelect')?.addEventListener('click', () => {
         state.roundLive = false;
         showScreen('select');
+      });
+      document.getElementById('btnToggleTouchPadStyle')?.addEventListener('click', () => {
+        sfx.click();
+        state.touchControlStyle = state.touchControlStyle === 'stick' ? 'dpad' : 'stick';
+        applyTouchPadStyleUI();
       });
       document.getElementById('btnRestartMatch').addEventListener('click', () => startMatch());
 
@@ -6371,6 +7045,9 @@
       });
       document.getElementById('btnPauseGoHome').addEventListener('click', () => {
         state.roundLive = false;
+        if (state.roomCode && state.tourney.active) {
+          leaveOnlineRoomCleanly();
+        }
         showScreen('home');
       });
 
@@ -6400,21 +7077,24 @@
       };
 
       // =====================================================================
-      // 8-WAY VIRTUAL ARCADE THUMBSTICK CONTROLLER (MULTI-TOUCH & DIAGONAL JUMP)
+      // SMARTPHONE ERGONOMIC CONTROLLER A: FLOATING-RESPONSE 8-WAY THUMBSTICK
       // =====================================================================
       const joyZone = document.getElementById('virtualJoystickZone');
       const joyBase = document.getElementById('joystickBase');
       const joyKnob = document.getElementById('joystickKnob');
       let joyTouchId = null;
+      let joyOriginX = 0;
+      let joyOriginY = 0;
       let joyMouseDown = false;
       let joyJumpTriggered = false;
+      let isHoldGuardActive = false;
 
       function updateJoystickPosition(clientX, clientY) {
         if (!joyBase || !joyKnob) return;
         const rect = joyBase.getBoundingClientRect();
-        const cx = rect.left + rect.width * 0.5;
-        const cy = rect.top + rect.height * 0.5;
-        const maxRadius = rect.width * 0.38;
+        const cx = joyOriginX || (rect.left + rect.width * 0.5);
+        const cy = joyOriginY || (rect.top + rect.height * 0.5);
+        const maxRadius = Math.max(36, rect.width * 0.38);
 
         let dx = clientX - cx;
         let dy = clientY - cy;
@@ -6432,17 +7112,23 @@
         const who = getTouchWho();
         const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
 
-        keyBag.left = normX < -0.26;
-        keyBag.right = normX > 0.26;
-        keyBag.down = normY > 0.38;
-        syncLocalKeysToFighterIntent(who, keyBag);
+        keyBag.left = normX < -0.22;
+        keyBag.right = normX > 0.22;
+        keyBag.down = normY > 0.42 || isHoldGuardActive;
 
-        if (normY < -0.40) {
+        document.getElementById('joyHintLeft')?.classList.toggle('text-sky-300', keyBag.left);
+        document.getElementById('joyHintRight')?.classList.toggle('text-sky-300', keyBag.right);
+        document.getElementById('joyHintDown')?.classList.toggle('text-amber-200', keyBag.down);
+
+        emitLocalKeyStateIfChanged(who);
+
+        if (normY < -0.46) {
           if (!joyJumpTriggered) {
             joyJumpTriggered = true;
+            triggerHaptic(8);
             performFighterAction(who, 'jump');
           }
-        } else if (normY > -0.20) {
+        } else if (normY > -0.22) {
           joyJumpTriggered = false;
         }
       }
@@ -6451,16 +7137,18 @@
         joyTouchId = null;
         joyMouseDown = false;
         joyJumpTriggered = false;
+        joyOriginX = 0;
+        joyOriginY = 0;
         if (joyKnob) {
-          joyKnob.style.transition = 'transform 0.12s cubic-bezier(0.16, 1, 0.3, 1)';
+          joyKnob.style.transition = 'transform 0.10s cubic-bezier(0.16, 1, 0.3, 1)';
           joyKnob.style.transform = 'translate(0px, 0px)';
         }
         const who = getTouchWho();
         const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
         keyBag.left = false;
         keyBag.right = false;
-        keyBag.down = false;
-        syncLocalKeysToFighterIntent(who, keyBag);
+        if (!isHoldGuardActive) keyBag.down = false;
+        emitLocalKeyStateIfChanged(who);
       }
 
       if (joyZone) {
@@ -6469,6 +7157,10 @@
           for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
             joyTouchId = t.identifier;
+            const rect = joyBase.getBoundingClientRect();
+            joyOriginX = rect.left + rect.width * 0.5;
+            joyOriginY = rect.top + rect.height * 0.5;
+            triggerHaptic(6);
             updateJoystickPosition(t.clientX, t.clientY);
             break;
           }
@@ -6501,6 +7193,9 @@
         joyZone.addEventListener('mousedown', e => {
           e.preventDefault();
           joyMouseDown = true;
+          const rect = joyBase.getBoundingClientRect();
+          joyOriginX = rect.left + rect.width * 0.5;
+          joyOriginY = rect.top + rect.height * 0.5;
           updateJoystickPosition(e.clientX, e.clientY);
         });
         window.addEventListener('mousemove', e => {
@@ -6512,18 +7207,106 @@
         });
       }
 
-      function syncTouchButtons(e) {
+      // =====================================================================
+      // SMARTPHONE ERGONOMIC CONTROLLER B: CRISP 4-BUTTON D-PAD MODE
+      // =====================================================================
+      const dpadZone = document.getElementById('virtualDpadZone');
+      function syncDpadTouches(e) {
         if (e.cancelable) e.preventDefault();
         const who = getTouchWho();
-        const activeActs = new Set();
+        const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+        const activeDirs = new Set();
 
         for (let i = 0; i < e.touches.length; i++) {
           const t = e.touches[i];
-          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-p1-act]');
-          if (el) {
-            const a = el.getAttribute('data-p1-act');
+          const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-dpad]');
+          if (el) activeDirs.add(el.getAttribute('data-dpad'));
+        }
+
+        document.querySelectorAll('[data-dpad]').forEach(btn => {
+          const d = btn.getAttribute('data-dpad');
+          const wasPressed = btn.classList.contains('pressed');
+          const nowPressed = activeDirs.has(d);
+          btn.classList.toggle('pressed', nowPressed);
+          if (d === 'up' && nowPressed && !wasPressed) {
+            triggerHaptic(8);
+            performFighterAction(who, 'jump');
+          }
+        });
+
+        keyBag.left = activeDirs.has('left');
+        keyBag.right = activeDirs.has('right');
+        keyBag.down = activeDirs.has('down') || isHoldGuardActive;
+        emitLocalKeyStateIfChanged(who);
+      }
+
+      if (dpadZone) {
+        dpadZone.addEventListener('touchstart', syncDpadTouches, { passive: false });
+        dpadZone.addEventListener('touchmove', syncDpadTouches, { passive: false });
+        dpadZone.addEventListener('touchend', syncDpadTouches, { passive: false });
+        dpadZone.addEventListener('touchcancel', syncDpadTouches, { passive: false });
+
+        document.querySelectorAll('[data-dpad]').forEach(btn => {
+          const d = btn.getAttribute('data-dpad');
+          btn.addEventListener('mousedown', e => {
+            e.preventDefault();
+            btn.classList.add('pressed');
+            const who = getTouchWho();
+            const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+            if (d === 'left') keyBag.left = true;
+            if (d === 'right') keyBag.right = true;
+            if (d === 'down') keyBag.down = true;
+            if (d === 'up') performFighterAction(who, 'jump');
+            emitLocalKeyStateIfChanged(who);
+          });
+          const endMouseDpad = () => {
+            btn.classList.remove('pressed');
+            const who = getTouchWho();
+            const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+            if (d === 'left') keyBag.left = false;
+            if (d === 'right') keyBag.right = false;
+            if (d === 'down' && !isHoldGuardActive) keyBag.down = false;
+            emitLocalKeyStateIfChanged(who);
+          };
+          btn.addEventListener('mouseup', endMouseDpad);
+          btn.addEventListener('mouseleave', endMouseDpad);
+        });
+      }
+
+      // =====================================================================
+      // RIGHT ACTION CLUSTER: MULTI-TOUCH STRIKES, JUMP, GRAB & HOLD-GUARD
+      // =====================================================================
+      function syncTouchButtons(e) {
+        if (e.cancelable) e.preventDefault();
+        const who = getTouchWho();
+        const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+        const activeActs = new Set();
+        let guardTouched = false;
+
+        for (let i = 0; i < e.touches.length; i++) {
+          const t = e.touches[i];
+          const hitEl = document.elementFromPoint(t.clientX, t.clientY);
+          if (!hitEl) continue;
+          const actEl = hitEl.closest('[data-p1-act]');
+          if (actEl) {
+            const a = actEl.getAttribute('data-p1-act');
             if (a) activeActs.add(a);
           }
+          const guardEl = hitEl.closest('[data-hold-guard]');
+          if (guardEl) {
+            guardTouched = true;
+          }
+        }
+
+        const guardBtn = document.querySelector('[data-hold-guard]');
+        if (guardBtn) {
+          guardBtn.classList.toggle('pressed', guardTouched);
+        }
+        if (guardTouched !== isHoldGuardActive) {
+          isHoldGuardActive = guardTouched;
+          keyBag.down = isHoldGuardActive;
+          if (isHoldGuardActive) triggerHaptic(8);
+          emitLocalKeyStateIfChanged(who);
         }
 
         document.querySelectorAll('[data-p1-act]').forEach(b => {
@@ -6532,18 +7315,46 @@
           const isNowPressed = activeActs.has(a);
           b.classList.toggle('pressed', isNowPressed);
           if (isNowPressed && !wasPressed) {
+            triggerHaptic(a === 'super' ? 20 : 10);
             performFighterAction(who, a);
           }
         });
       }
 
+      const rightCluster = document.getElementById('rightCombatCluster');
+      if (rightCluster) {
+        rightCluster.addEventListener('touchstart', syncTouchButtons, { passive: false });
+        rightCluster.addEventListener('touchmove', syncTouchButtons, { passive: false });
+        rightCluster.addEventListener('touchend', syncTouchButtons, { passive: false });
+        rightCluster.addEventListener('touchcancel', syncTouchButtons, { passive: false });
+      }
+
+      const guardBtnEl = document.querySelector('[data-hold-guard]');
+      if (guardBtnEl) {
+        guardBtnEl.addEventListener('mousedown', e => {
+          e.preventDefault();
+          guardBtnEl.classList.add('pressed');
+          isHoldGuardActive = true;
+          const who = getTouchWho();
+          const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+          keyBag.down = true;
+          emitLocalKeyStateIfChanged(who);
+        });
+        const releaseGuardMouse = () => {
+          if (!isHoldGuardActive) return;
+          guardBtnEl.classList.remove('pressed');
+          isHoldGuardActive = false;
+          const who = getTouchWho();
+          const keyBag = who === 'p1' ? state.p1Keys : state.p2Keys;
+          keyBag.down = false;
+          emitLocalKeyStateIfChanged(who);
+        };
+        guardBtnEl.addEventListener('mouseup', releaseGuardMouse);
+        guardBtnEl.addEventListener('mouseleave', releaseGuardMouse);
+      }
+
       document.querySelectorAll('[data-p1-act]').forEach(btn => {
         const act = btn.getAttribute('data-p1-act');
-
-        btn.addEventListener('touchstart', syncTouchButtons, { passive: false });
-        btn.addEventListener('touchmove', syncTouchButtons, { passive: false });
-        btn.addEventListener('touchend', syncTouchButtons, { passive: false });
-        btn.addEventListener('touchcancel', syncTouchButtons, { passive: false });
 
         btn.addEventListener('mousedown', e => {
           e.preventDefault();
@@ -6574,17 +7385,17 @@
 
         if (k === 'a' || (state.mode !== '2p' && e.key === 'ArrowLeft')) {
           primaryKeys.left = true;
-          syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
+          emitLocalKeyStateIfChanged(primaryWho);
         } else if (k === 'd' || (state.mode !== '2p' && e.key === 'ArrowRight')) {
           primaryKeys.right = true;
-          syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
+          emitLocalKeyStateIfChanged(primaryWho);
         } else if (k === 'w' || (state.mode !== '2p' && e.key === 'ArrowUp')) {
           e.preventDefault();
           performFighterAction(primaryWho, 'jump');
         } else if (k === 's' || (state.mode !== '2p' && e.key === 'ArrowDown')) {
           e.preventDefault();
           primaryKeys.down = true;
-          syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
+          emitLocalKeyStateIfChanged(primaryWho);
         } else if (k === 'f' || (state.mode !== '2p' && k === 'j')) {
           performFighterAction(primaryWho, 'lp');
         } else if (k === 'g' || (state.mode !== '2p' && k === 'k')) {
@@ -6603,17 +7414,17 @@
         if (state.mode === '2p') {
           if (e.key === 'ArrowLeft') {
             state.p2Keys.left = true;
-            syncLocalKeysToFighterIntent('p2', state.p2Keys);
+            emitLocalKeyStateIfChanged('p2');
           } else if (e.key === 'ArrowRight') {
             state.p2Keys.right = true;
-            syncLocalKeysToFighterIntent('p2', state.p2Keys);
+            emitLocalKeyStateIfChanged('p2');
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             performFighterAction('p2', 'jump');
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             state.p2Keys.down = true;
-            syncLocalKeysToFighterIntent('p2', state.p2Keys);
+            emitLocalKeyStateIfChanged('p2');
           } else if (k === 'k' || e.key === '1') {
             performFighterAction('p2', 'lp');
           } else if (k === 'l' || e.key === '2') {
@@ -6649,14 +7460,14 @@
           primaryKeys.down = false;
           changed = true;
         }
-        if (changed) syncLocalKeysToFighterIntent(primaryWho, primaryKeys);
+        if (changed) emitLocalKeyStateIfChanged(primaryWho);
 
         if (state.mode === '2p') {
           let p2Changed = false;
           if (e.key === 'ArrowLeft') { state.p2Keys.left = false; p2Changed = true; }
           else if (e.key === 'ArrowRight') { state.p2Keys.right = false; p2Changed = true; }
           else if (e.key === 'ArrowDown') { state.p2Keys.down = false; p2Changed = true; }
-          if (p2Changed) syncLocalKeysToFighterIntent('p2', state.p2Keys);
+          if (p2Changed) emitLocalKeyStateIfChanged('p2');
         }
       });
     }
@@ -6694,6 +7505,7 @@
     }
     setInterval(syncHostedViewportAndOrientation, 400);
 
+    // Fullscreen & Landscape Orientation Lock Helper for Mobile Phones
     async function requestLandscapeFullscreen() {
       try {
         if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
@@ -6705,6 +7517,7 @@
       } catch (err) {}
     }
 
+    // Unlock Mobile Web Audio & SpeechSynthesis on any first touch/tap gesture
     ['touchstart', 'touchend', 'pointerdown', 'click'].forEach(evtName => {
       window.addEventListener(evtName, () => {
         if (typeof sfx !== 'undefined' && sfx) {
